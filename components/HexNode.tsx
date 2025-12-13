@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Hex } from '../types';
 
-// Hardcoded tool mappings from Module 05
+// Hardcoded tool mappings
 const TOOL_HEX_LINKS: Record<string, string> = {
   'CHEM-3_9-CHROMA-01': 'https://script.google.com/a/macros/aischennai.org/s/AKfycbwj65yf-OkJDdcSx9CAJlgMzea5CzpMVGg2AAbF727ilJHsJH8sGDgsdXfCvjAH-8M4/exec'
 };
@@ -67,44 +67,44 @@ export const HexNode: React.FC<HexNodeProps> = ({
   // --- Size Styles ---
   let width = gridMetrics.width;
   let height = gridMetrics.height;
-  let fontSizeIcon = 'text-2xl';
-  let fontSizeText = 'text-xs';
+  let iconSize = 24;
+  let textSize = 'text-xs';
 
   if (hex.size === 'large') {
     width *= 1.3;
     height *= 1.3;
-    fontSizeIcon = 'text-3xl';
-    fontSizeText = 'text-sm';
+    iconSize = 32;
+    textSize = 'text-sm';
   } else if (hex.size === 'small') {
     width *= 0.8;
     height *= 0.8;
-    fontSizeIcon = 'text-lg';
-    fontSizeText = 'text-[10px]';
+    iconSize = 18;
+    textSize = 'text-[10px]';
   }
 
-  // --- Type Styles ---
-  const getTypeStyles = (type: string) => {
+  // --- Visual Config based on Type/Status ---
+  // Core = Blue, Student = Violet, Ext = Emerald, Scaf = Amber, Class = Pink
+  const getTheme = (type: string, status?: string) => {
+    if (status === 'locked') return { fill: '#f1f5f9', stroke: '#cbd5e1', text: '#94a3b8' }; // Slate-100/300/400
+    
     switch (type) {
-      case 'student': return 'bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-violet-500/40 ring-violet-500';
-      case 'class': return 'bg-white text-slate-700 shadow-pink-500/20 ring-pink-500 ring-2';
-      case 'core': return 'bg-white text-slate-700 shadow-blue-500/20 ring-blue-500 ring-2';
-      case 'ext': return 'bg-white text-slate-700 shadow-emerald-500/20 ring-emerald-500 ring-2';
-      case 'scaf': return 'bg-white text-slate-700 shadow-orange-500/20 ring-orange-500 ring-2';
-      default: return 'bg-white text-slate-700 shadow-slate-500/20 ring-slate-400 ring-2';
+        case 'core': return { fill: '#ffffff', stroke: '#3b82f6', text: '#334155' }; // Blue-500
+        case 'ext': return { fill: '#ffffff', stroke: '#10b981', text: '#334155' }; // Emerald-500
+        case 'scaf': return { fill: '#ffffff', stroke: '#f59e0b', text: '#334155' }; // Amber-500
+        case 'student': return { fill: '#8b5cf6', stroke: '#7c3aed', text: '#ffffff' }; // Violet-500/600
+        case 'class': return { fill: '#ffffff', stroke: '#ec4899', text: '#334155' }; // Pink-500
+        default: return { fill: '#ffffff', stroke: '#94a3b8', text: '#334155' };
     }
   };
 
-  const getStatusStyles = (status?: string) => {
-    if (status === 'locked') return 'opacity-60 grayscale bg-slate-200 ring-slate-300';
-    if (status === 'completed') return 'bg-gradient-to-br from-emerald-50 to-emerald-100 ring-emerald-500';
-    return '';
-  };
+  const theme = getTheme(hex.type, hex.status);
   
+  // Progress bar color
   const getProgressColor = (progress?: string) => {
-    if (progress === 'mastered') return 'bg-purple-500';
-    if (progress === 'completed') return 'bg-green-500';
-    if (progress === 'in_progress') return 'bg-orange-500';
-    return 'bg-slate-200';
+    if (progress === 'mastered') return '#a855f7'; // Purple-500
+    if (progress === 'completed') return '#22c55e'; // Green-500
+    if (progress === 'in_progress') return '#f97316'; // Orange-500
+    return 'transparent';
   };
 
   // --- Drag & Drop Handlers ---
@@ -114,71 +114,30 @@ export const HexNode: React.FC<HexNodeProps> = ({
     setIsDragging(true);
     setStartPos({ x: clientX - currentX, y: clientY - currentY });
   };
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!isBuilderMode) return;
-    e.preventDefault(); // Prevent text selection
-    startDrag(e.clientX, e.clientY);
-  };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (!isBuilderMode) return;
-    // e.preventDefault(); // Handled in move listener to prevent scrolling
-    const touch = e.touches[0];
-    startDrag(touch.clientX, touch.clientY);
-  };
-
-  // Global move/up listeners
-  useEffect(() => {
+  
+   useEffect(() => {
     if (!isDragging) return;
-
     const handleMove = (clientX: number, clientY: number) => {
-      setDragPos({
-        x: clientX - startPos.x,
-        y: clientY - startPos.y
-      });
+      setDragPos({ x: clientX - startPos.x, y: clientY - startPos.y });
     };
-
     const handleEnd = () => {
       setIsDragging(false);
-
-      // Snap to grid
       const approxRow = Math.round((dragPos.y - 20) / gridMetrics.rowSpacing);
       const approxRowClean = Math.max(0, approxRow);
-      
       const isOddRow = approxRowClean % 2 !== 0;
       const xOffset = isOddRow ? gridMetrics.colSpacing / 2 : 0;
-      
       const approxCol = Math.round((dragPos.x - 20 - xOffset) / gridMetrics.colSpacing);
       const approxColClean = Math.max(0, approxCol);
-
       onPositionChange(hex, approxRowClean, approxColClean);
     };
-
-    const onMouseMove = (e: MouseEvent) => {
-      e.preventDefault();
-      handleMove(e.clientX, e.clientY);
-    };
-
-    const onMouseUp = () => {
-      handleEnd();
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault(); // Important: prevents scrolling
-      const touch = e.touches[0];
-      handleMove(touch.clientX, touch.clientY);
-    };
-
-    const onTouchEnd = () => {
-      handleEnd();
-    };
-
+    const onMouseMove = (e: MouseEvent) => { e.preventDefault(); handleMove(e.clientX, e.clientY); };
+    const onMouseUp = () => handleEnd();
+    const onTouchMove = (e: TouchEvent) => { e.preventDefault(); handleMove(e.touches[0].clientX, e.touches[0].clientY); };
+    const onTouchEnd = () => handleEnd();
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     window.addEventListener('touchmove', onTouchMove, { passive: false });
     window.addEventListener('touchend', onTouchEnd);
-
     return () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
@@ -187,18 +146,13 @@ export const HexNode: React.FC<HexNodeProps> = ({
     };
   }, [isDragging, dragPos, startPos, gridMetrics, hex, onPositionChange]);
 
-  // --- Click Handler ---
   const handleClick = (e: React.MouseEvent) => {
     if (isDragging) return;
-    
     if (isBuilderMode) {
         onSelect(hex);
     } else {
-        // Viewer/Student Mode
-        onSelect(hex); // Also select to show details in panel
-        
+        onSelect(hex);
         if (hasLink && baseLink) {
-            // Logic from Module 05: Append view param if it's a tool link
             if (TOOL_HEX_LINKS[hex.id]) {
                 const sep = baseLink.indexOf('?') === -1 ? '?' : '&';
                 const url = `${baseLink}${sep}view=student&hexId=${encodeURIComponent(hex.id)}`;
@@ -217,100 +171,97 @@ export const HexNode: React.FC<HexNodeProps> = ({
         isDimmed = true;
     } else {
         const domains = hex.curriculum?.sbarDomains || [];
-        
         const hasK = domains.some(d => d.includes('K') || d.includes('U'));
         const hasT = domains.some(d => d.includes('T'));
         const hasC = domains.some(d => d.includes('C'));
-
         const requireK = filters.sbar.K;
         const requireT = filters.sbar.T;
         const requireC = filters.sbar.C;
-        const anySbarFilter = requireK || requireT || requireC;
-
-        if (anySbarFilter) {
-            const hexHasRequiredTag = (requireK && hasK) || (requireT && hasT) || (requireC && hasC);
-            if (!hexHasRequiredTag) {
-                isDimmed = true;
-            }
+        if ((requireK || requireT || requireC) && !((requireK && hasK) || (requireT && hasT) || (requireC && hasC))) {
+            isDimmed = true;
         }
     }
   }
 
-  // --- Tooltip Construction ---
-  const getTooltip = () => {
-    const lines = [];
-    lines.push(`${hex.label || hex.id || 'Untitled'} [${hex.type.toUpperCase()}]`);
-    if (hex.status) lines.push(`Status: ${hex.status}`);
-    
-    const cur = hex.curriculum || {};
-    if (cur.sbarDomains?.length) lines.push(`SBAR: ${cur.sbarDomains.join(', ')}`);
-    if (cur.standards?.length) lines.push(`Standards: ${cur.standards.join(', ')}`);
-    if (cur.atlSkills?.length) lines.push(`ATL: ${cur.atlSkills.join(', ')}`);
-    if (cur.competencies?.length) lines.push(`Competencies: ${cur.competencies.join(', ')}`);
-    
-    const pLabel = hex.progress === 'mastered' ? 'Mastered' : 
-                   hex.progress === 'completed' ? 'Completed' :
-                   hex.progress === 'in_progress' ? 'In Progress' : 'Not Started';
-    lines.push(`Progress: ${pLabel}`);
-    
-    return lines.join('\n');
+  // --- SVG Path Construction ---
+  // Pointy Topped Hexagon Points
+  const p = {
+    tm: `${width/2},0`,
+    tr: `${width},${height/4}`,
+    br: `${width},${height*0.75}`,
+    bm: `${width/2},${height}`,
+    bl: `${0},${height*0.75}`,
+    tl: `${0},${height/4}`
   };
+  const points = `${p.tm} ${p.tr} ${p.br} ${p.bm} ${p.bl} ${p.tl}`;
+
+  // Progress Bar Path (Bottom edge segment: bl -> bm -> br)
+  const progressPath = `M ${0} ${height*0.75} L ${width/2} ${height} L ${width} ${height*0.75}`;
 
   return (
     <div
-      className={`absolute flex justify-center items-center transition-transform duration-200 
+        className={`absolute transition-transform duration-200 
         ${isBuilderMode ? 'cursor-move' : hasLink ? 'cursor-pointer hover:scale-105' : 'cursor-default'}
-        ${isSelected ? 'z-20' : 'z-0 hover:z-10'}
+        ${isSelected ? 'z-20' : 'z-10 hover:z-20'}
         ${isDimmed ? 'opacity-30 grayscale' : 'opacity-100'}
-      `}
-      style={{
-        width: `${width}px`,
-        height: `${height * 1.1}px`, // Slight wrapper height increase
-        left: `${currentX}px`,
-        top: `${currentY}px`,
-      }}
-      onMouseDown={handleMouseDown}
-      onTouchStart={handleTouchStart}
-      onClick={handleClick}
-    >
-      <div 
-        className={`w-full h-full flex flex-col items-center justify-center p-2 shadow-lg transition-all duration-200 relative
-          ${getTypeStyles(hex.type)}
-          ${getStatusStyles(hex.status)}
-          ${isSelected ? 'ring-4 ring-offset-2 ring-sky-500' : ''}
         `}
         style={{
-          clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+            width: width,
+            height: height,
+            left: currentX,
+            top: currentY,
+            // SVG Filter handles shadow, but CSS filter is easier for the whole shape
+            filter: 'drop-shadow(0px 4px 6px rgba(0,0,0,0.15))'
         }}
-        title={getTooltip()}
-      >
-        <div className={`mb-1 ${fontSizeIcon} leading-none`}>{hex.icon || '⬡'}</div>
-        <div className={`font-bold text-center leading-tight ${fontSizeText} ${hex.type === 'student' ? 'text-white' : 'text-slate-600'}`}>
-          {hex.label || 'Untitled'}
-        </div>
-        <div className="text-[9px] opacity-40 mt-1 font-mono">
-          {hex.row}, {hex.col}
-        </div>
-        
-        {/* Student View: SBAR Tag */}
-        {!isBuilderMode && hex.curriculum?.sbarDomains && hex.curriculum.sbarDomains.length > 0 && (
-          <div className="absolute top-1 left-1 bg-slate-900/75 text-white text-[8px] rounded-full px-1.5 py-0.5 max-w-[80%] truncate">
-            {hex.curriculum.sbarDomains.join('/')}
-          </div>
-        )}
+        onMouseDown={(e) => { if (isBuilderMode) { e.preventDefault(); startDrag(e.clientX, e.clientY); }}}
+        onTouchStart={(e) => { if (isBuilderMode) { startDrag(e.touches[0].clientX, e.touches[0].clientY); }}}
+        onClick={handleClick}
+        title={hex.label}
+    >
+        <svg width={width} height={height} className="overflow-visible block">
+            {/* Background Hex */}
+            <polygon 
+                points={points} 
+                fill={theme.fill} 
+                stroke={theme.stroke} 
+                strokeWidth={isSelected ? 4 : 2}
+                className="transition-colors duration-200"
+            />
+            
+            {/* Progress Indicator (if not builder and started) */}
+            {!isBuilderMode && hex.progress && hex.progress !== 'not_started' && (
+                 <path d={progressPath} fill="none" stroke={getProgressColor(hex.progress)} strokeWidth="5" strokeLinecap="round" opacity="0.9" />
+            )}
+        </svg>
 
-        {/* Student View: Link Indicator */}
-        {hasLink && !isBuilderMode && (
-          <div className="absolute bottom-2 right-4 text-xs opacity-70">🔗</div>
-        )}
+        {/* Content Overlay */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-2 text-center">
+            <div style={{ fontSize: iconSize }} className="leading-none mb-1">{hex.icon || '⬡'}</div>
+            <div 
+                className={`font-bold leading-tight ${textSize} line-clamp-2 px-1`} 
+                style={{ color: theme.text }}
+            >
+                {hex.label}
+            </div>
+            
+             <div className="text-[8px] opacity-40 font-mono absolute bottom-4 text-slate-500">
+                {hex.row}, {hex.col}
+             </div>
+        </div>
 
-        {/* Student View: Progress Strip */}
+        {/* Badges Overlay */}
         {!isBuilderMode && (
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/10">
-            <div className={`h-full w-full transition-colors ${getProgressColor(hex.progress)}`}></div>
-          </div>
+            <>
+                {hex.curriculum?.sbarDomains?.length ? (
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -mt-1 bg-slate-800 text-white text-[9px] px-1.5 rounded-full shadow-sm whitespace-nowrap z-30">
+                        {hex.curriculum.sbarDomains.join('/')}
+                    </div>
+                ) : null}
+                {hasLink && (
+                     <div className="absolute bottom-1 right-2 text-xs opacity-50 z-30">🔗</div>
+                )}
+            </>
         )}
-      </div>
     </div>
   );
 };
