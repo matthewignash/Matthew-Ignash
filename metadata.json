@@ -1,0 +1,5 @@
+{
+  "name": "Project Rebuild",
+  "description": "Rebuilding application from provided source files.",
+  "requestFramePermissions": []
+}

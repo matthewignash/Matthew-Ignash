@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #f1f5f9; /* Slate 100 matches var(--bg-color) */
+}
+
+.map-grid-bg {
+  background: radial-gradient(circle at top left, #eff6ff, #f9fafb);
+}
