@@ -1,24 +1,35 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Hex, LearningMap, ClassGroup, User, HexTemplate, CurriculumConfig, HexProgress, Course, Unit, ConnectionType } from './types';
-import { storageService, getStorageMode, setStorageMode, subscribeToModeChanges, StorageMode } from './services/storage';
-import { apiService, StatusResponse } from './services/api';
+import { Hex, LearningMap, ClassGroup, HexTemplate, CurriculumConfig, HexProgress, Course, Unit, User } from './types';
+
+// Services
+import { storageService } from './services/storage';
+import { getStorageMode, setStorageMode, subscribeToModeChanges, StorageMode } from './services/storage';
+
+// Components
 import { HexNode } from './components/HexNode';
 import { EditorPanel } from './components/EditorPanel';
 import { StudentPanel } from './components/StudentPanel';
 import { DevLogPanel } from './components/DevLogPanel';
 import { DashboardPanel } from './components/DashboardPanel';
 import { UbDPlanner } from './components/UbDPlanner';
-import { SetupWizard } from './components/SetupWizard';
-import { ConnectionStatus } from './components/ConnectionStatus';
 import { SettingsPanel } from './components/SettingsPanel';
-import { ResponsivePanel } from './components/ResponsivePanel';
-import { MobileNavBar } from './components/MobileNavBar';
-import { SidebarNav } from './components/SidebarNav';
-import { StudentSidebar } from './components/StudentSidebar';
-import { DiplomaView } from './components/DiplomaView';
-import { PortfolioModal } from './components/PortfolioModal';
-import { AssignmentModal } from './components/AssignmentModal';
-import { ChevronRight, Save, Plus, Copy, Users, Layers, Download, School, FileText, Table, Bug, PieChart, Filter, RefreshCw, User as UserIcon, Layout, Hexagon, Cloud } from 'lucide-react';
+import { ConnectionStatus } from './components/ConnectionStatus';
+import { SetupWizard } from './components/SetupWizard';
+
+// Auth Context
+import { AuthProvider, useAuth, RequireEditor } from './contexts/AuthContext';
+
+// Icons
+import { 
+  Save, Plus, Copy, Users, Layers, 
+  Bug, PieChart, Filter, RefreshCw, 
+  Layout, Hexagon, Settings 
+} from 'lucide-react';
+
+// ============================================================
+// CONSTANTS
+// ============================================================
 
 const HEX_METRICS = {
   width: 110,     
@@ -27,201 +38,88 @@ const HEX_METRICS = {
   rowSpacing: 75, 
 };
 
-type AppMode = 'teacher' | 'student';
-type ViewMode = 'map' | 'unit' | 'diploma';
+type ViewMode = 'map' | 'unit';
 
-// Helper to calculate hex center for connections
-const getHexCenter = (row: number, col: number) => {
-    const xOffset = (row % 2 === 0) ? 0 : HEX_METRICS.width / 2;
-    const x = col * HEX_METRICS.colSpacing + xOffset + 20 + HEX_METRICS.width / 2;
-    const y = row * HEX_METRICS.rowSpacing + 20 + HEX_METRICS.height / 2;
-    return { x, y };
-};
+// ============================================================
+// MAIN APP CONTENT
+// ============================================================
 
-// Component to render background grid for snapping visualization
-const HexGridBackground = () => {
-  const pWidth = HEX_METRICS.colSpacing * 2;
-  const pHeight = HEX_METRICS.rowSpacing * 2;
-  const offsetX = 20 + HEX_METRICS.width / 2;
-  const offsetY = 20 + HEX_METRICS.height / 2;
+const AppContent: React.FC = () => {
+  // Get auth state
+  const { 
+    user, 
+    loading: authLoading, 
+    isLocalMode, 
+    isConnected,
+    canEdit,
+    canCreate,
+    canAssign,
+    refreshUser
+  } = useAuth();
 
-  return (
-    <svg className="absolute inset-0 pointer-events-none opacity-20 z-0" width="100%" height="100%">
-      <defs>
-        <pattern id="hex-grid-pattern" x="0" y="0" width={pWidth} height={pHeight} patternUnits="userSpaceOnUse">
-           <circle cx={offsetX} cy={offsetY} r="2" fill="#94a3b8" />
-           <circle cx={offsetX + HEX_METRICS.colSpacing} cy={offsetY} r="2" fill="#94a3b8" />
-           <circle cx={offsetX + HEX_METRICS.width/2} cy={offsetY + HEX_METRICS.rowSpacing} r="2" fill="#94a3b8" />
-           <circle cx={offsetX + HEX_METRICS.width/2 + HEX_METRICS.colSpacing} cy={offsetY + HEX_METRICS.rowSpacing} r="2" fill="#94a3b8" />
-        </pattern>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#hex-grid-pattern)" />
-    </svg>
-  );
-};
-
-const ConnectionLayer = ({ hexes }: { hexes: Hex[] }) => {
-    const connections: { start: {x:number,y:number}, end: {x:number,y:number}, type: ConnectionType, id: string }[] = [];
-    
-    hexes.forEach(source => {
-        if (!source.connections) return;
-        source.connections.forEach(conn => {
-            const target = hexes.find(h => h.id === conn.targetHexId);
-            if (target) {
-                const start = getHexCenter(source.row, source.col);
-                const end = getHexCenter(target.row, target.col);
-                connections.push({
-                    start, 
-                    end, 
-                    type: conn.type, 
-                    id: `${source.id}-${target.id}`
-                });
-            }
-        });
-    });
-
-    const getColor = (type: ConnectionType) => {
-        switch(type) {
-            case 'conditional': return '#f97316';
-            case 'remedial': return '#10b981';
-            case 'extension': return '#8b5cf6';
-            default: return '#94a3b8';
-        }
-    };
-    
-    const getDash = (type: ConnectionType) => {
-        return type === 'conditional' ? '5,5' : '0';
-    };
-
-    return (
-        <svg className="absolute inset-0 w-full h-full pointer-events-none z-0 overflow-visible">
-            <defs>
-                <marker id="arrow-default" markerWidth="10" markerHeight="10" refX="28" refY="3" orient="auto" markerUnits="strokeWidth">
-                    <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8" />
-                </marker>
-                <marker id="arrow-conditional" markerWidth="10" markerHeight="10" refX="28" refY="3" orient="auto" markerUnits="strokeWidth">
-                    <path d="M0,0 L0,6 L9,3 z" fill="#f97316" />
-                </marker>
-                <marker id="arrow-remedial" markerWidth="10" markerHeight="10" refX="28" refY="3" orient="auto" markerUnits="strokeWidth">
-                    <path d="M0,0 L0,6 L9,3 z" fill="#10b981" />
-                </marker>
-                 <marker id="arrow-extension" markerWidth="10" markerHeight="10" refX="28" refY="3" orient="auto" markerUnits="strokeWidth">
-                    <path d="M0,0 L0,6 L9,3 z" fill="#8b5cf6" />
-                </marker>
-            </defs>
-            {connections.map(c => (
-                <path 
-                    key={c.id}
-                    d={`M ${c.start.x} ${c.start.y} L ${c.end.x} ${c.end.y}`}
-                    stroke={getColor(c.type)}
-                    strokeWidth="2"
-                    strokeDasharray={getDash(c.type)}
-                    fill="none"
-                    markerEnd={`url(#arrow-${c.type})`}
-                />
-            ))}
-        </svg>
-    );
-};
-
-export const App = () => {
-  // Global State
+  // ========================================
+  // STATE
+  // ========================================
+  
+  // Data state
   const [maps, setMaps] = useState<LearningMap[]>([]);
   const [classes, setClasses] = useState<ClassGroup[]>([]);
-  const [templates, setTemplates] = useState<HexTemplate[]>([]);
   const [curriculum, setCurriculum] = useState<CurriculumConfig | null>(null);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [units, setUnits] = useState<Unit[]>([]);
-  const [user, setUser] = useState<User | null>(null);
 
-  // UI State
-  const [appMode, setAppMode] = useState<AppMode>('teacher');
-  const [viewMode, setViewMode] = useState<ViewMode>('map');
-  const [isConnectionMode, setIsConnectionMode] = useState(false);
-  
+  // UI state
   const [currentMap, setCurrentMap] = useState<LearningMap | null>(null);
   const [builderMode, setBuilderMode] = useState(false);
   const [selectedHexId, setSelectedHexId] = useState<string | null>(null);
-  
+  const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [notification, setNotification] = useState<string | null>(null);
   const [showDevLog, setShowDevLog] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
-  const [showPortfolio, setShowPortfolio] = useState(false);
-  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('map');
+  const [storageMode, setStorageModeState] = useState<StorageMode>(getStorageMode());
   
-  // Navigation State
-  const [navCourseId, setNavCourseId] = useState<string>('');
-  const [navUnitId, setNavUnitId] = useState<string>('');
-  
-  // Filter State
+  // Filter state
   const [filters, setFilters] = useState({
     linkedOnly: false,
     sbar: { K: false, T: false, C: false }
   });
 
-  // Connection & Setup State
-  const [storageMode, setStorageModeState] = useState<StorageMode>(getStorageMode());
-  const [showSetupWizard, setShowSetupWizard] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [apiStatus, setApiStatus] = useState<StatusResponse | null>(null);
-
-  // Refs
   const mapGridRef = useRef<HTMLDivElement>(null);
 
-  // Subscribe to storage mode changes
+  // ========================================
+  // INITIALIZATION
+  // ========================================
+
   useEffect(() => {
-    const unsubscribe = subscribeToModeChanges(setStorageModeState);
+    // Subscribe to storage mode changes
+    const unsubscribe = subscribeToModeChanges((mode) => {
+        setStorageModeState(mode);
+        refreshUser();
+    });
     return unsubscribe;
-  }, []);
+  }, [refreshUser]);
 
-  // Check API status on load when in API mode
-  useEffect(() => {
-    const checkApi = async () => {
-      if (storageMode === 'api' && apiService.isConfigured()) {
-        try {
-          const status = await apiService.checkStatus();
-          setApiStatus(status);
-          if (status.needsSetup) {
-            setShowSetupWizard(true);
-          }
-        } catch (e) {
-          console.error('API check failed:', e);
-        }
-      }
-    };
-    checkApi();
-  }, [storageMode]);
-
-  // Router Logic & Initialization
   useEffect(() => {
     init();
-  }, [appMode]); 
+  }, [isConnected, user?.role, storageMode]);
 
   const init = async () => {
     setLoading(true);
     try {
-      const isStudent = appMode === 'student';
+      // Determine if user is student (for filtered data)
+      const isStudent = user?.role === 'student';
       
-      const [loadedMaps, loadedClasses, loadedTemplates, loadedCurriculum, loadedUser, loadedCourses, loadedUnits] = await Promise.all([
-        isStudent ? storageService.getStudentMaps() : storageService.getMaps(),
+      const [loadedMaps, loadedClasses, loadedCurriculum] = await Promise.all([
+        isStudent && !isLocalMode ? storageService.getStudentMaps() : storageService.getMaps(),
         storageService.getClasses(),
-        storageService.getHexTemplates(),
-        storageService.getCurriculumConfig(),
-        storageService.getCurrentUser(),
-        storageService.getCourses(),
-        storageService.getUnits()
+        storageService.getCurriculumConfig()
       ]);
       
       setMaps(loadedMaps);
       setClasses(loadedClasses);
-      setTemplates(loadedTemplates);
       setCurriculum(loadedCurriculum);
-      setCourses(loadedCourses);
-      setUnits(loadedUnits);
-      
-      // Removed hardcoded student mock. Now relies on backend to provide user identity.
-      setUser(loadedUser);
       
       if (loadedMaps.length > 0) {
         const existing = currentMap ? loadedMaps.find(m => m.mapId === currentMap.mapId) : null;
@@ -230,125 +128,42 @@ export const App = () => {
         setCurrentMap(null);
       }
 
+      // Students can't use builder mode
+      if (isStudent) {
+        setBuilderMode(false);
+      }
+
     } catch (err) {
       console.error("Failed to load data", err);
+      notify('Failed to load data');
     } finally {
       setLoading(false);
     }
   };
-  
-  // Auto-select course if only one
-  useEffect(() => {
-    if (courses.length === 1 && !navCourseId) {
-        setNavCourseId(courses[0].courseId);
-    }
-  }, [courses]);
 
-  // Sync Nav State when Map Changes Directly
-  useEffect(() => {
-    if (currentMap) {
-        if (currentMap.courseId && currentMap.courseId !== navCourseId) {
-            setNavCourseId(currentMap.courseId);
-        }
-        if (currentMap.unitId && currentMap.unitId !== navUnitId) {
-             setNavUnitId(currentMap.unitId);
-        }
-    }
-  }, [currentMap?.mapId]);
-
-  // Progress Fetching
-  useEffect(() => {
-    const fetchProgress = async () => {
-        if (appMode === 'student' && currentMap) {
-            const progress = await storageService.getProgressForUserAndMap(currentMap.mapId);
-            const updatedHexes = currentMap.hexes.map(h => ({
-                ...h,
-                progress: progress[h.id]?.status || 'not_started'
-            }));
-            const currentProgressStr = JSON.stringify(currentMap.hexes.map(h => h.progress));
-            const newProgressStr = JSON.stringify(updatedHexes.map(h => h.progress));
-            if (currentProgressStr !== newProgressStr) {
-                 setCurrentMap(prev => prev ? ({ ...prev, hexes: updatedHexes }) : null);
-            }
-        }
-    };
-    fetchProgress();
-  }, [currentMap?.mapId, appMode]);
+  // ========================================
+  // HELPERS
+  // ========================================
 
   const notify = (msg: string) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), 3000);
   };
 
-  // Connection handlers
+  // ========================================
+  // HANDLERS
+  // ========================================
+
   const handleModeChange = (mode: StorageMode) => {
     setStorageMode(mode);
-    setStorageModeState(mode);
-    init();
-  };
-
-  const handleSetupComplete = () => {
-    setShowSetupWizard(false);
-    setStorageMode('api');
-    setStorageModeState('api');
-    init();
-  };
-
-  const handleSetupSkip = () => {
-    setShowSetupWizard(false);
-    setStorageMode('mock');
-    setStorageModeState('mock');
-  };
-
-  const handleSetupRequired = () => {
-    setShowSetupWizard(true);
-  };
-
-  const toggleAppMode = (newMode: AppMode) => {
-    setAppMode(newMode);
-    setBuilderMode(false);
-    setSelectedHexId(null);
-    setShowDashboard(false);
-    if (newMode === 'student') setViewMode('map'); 
-    
-    const url = new URL(window.location.href);
-    url.searchParams.set('mode', newMode);
-    window.history.pushState({}, '', url);
   };
 
   const handleMapChange = (mapId: string) => {
     const found = maps.find(m => m.mapId === mapId);
     if (found) {
-      setCurrentMap(JSON.parse(JSON.stringify(found))); 
+      setCurrentMap(JSON.parse(JSON.stringify(found)));
       setSelectedHexId(null);
     }
-  };
-  
-  const handleNavCourseChange = (cId: string) => {
-      setNavCourseId(cId);
-      setNavUnitId('');
-  };
-
-  const handleNavUnitChange = (uId: string) => {
-      setNavUnitId(uId);
-      const unit = units.find(u => u.unitId === uId);
-      if (unit && unit.mapId) {
-          const map = maps.find(m => m.mapId === unit.mapId);
-          if (map) {
-              handleMapChange(map.mapId);
-              notify(`Loaded map for ${unit.title}`);
-          } else {
-              notify('Map for this unit not found');
-          }
-      } else if (unit) {
-          notify('This unit is not linked to a map yet');
-      }
-  };
-
-  const handleReload = async () => {
-      notify('Reloading...');
-      await init();
-      notify('Data reloaded');
   };
 
   const handleSave = async () => {
@@ -356,44 +171,33 @@ export const App = () => {
       notify('No map to save.');
       return;
     }
-    notify('Saving map...');
-    const mapToSave = { ...currentMap };
-    if (!mapToSave.mapId) mapToSave.mapId = `map-${Date.now()}`;
-    if (!mapToSave.title) mapToSave.title = 'Untitled Map';
-    if (!Array.isArray(mapToSave.hexes)) mapToSave.hexes = [];
-    if (!mapToSave.meta) mapToSave.meta = {};
-
-    try {
-        const savedMap = await storageService.saveMap(mapToSave);
-        setMaps(prev => {
-            const idx = prev.findIndex(m => m.mapId === savedMap.mapId);
-            if (idx >= 0) {
-                const newArr = [...prev];
-                newArr[idx] = savedMap;
-                return newArr;
-            }
-            return [...prev, savedMap];
-        });
-        setCurrentMap(savedMap);
-        notify('Map saved successfully.');
-    } catch (err) {
-        console.error(err);
-        notify('Error saving map.');
+    if (!canEdit) {
+      notify('You do not have permission to save.');
+      return;
     }
-  };
-  
-  const handleProgressUpdate = async (hexId: string, status: HexProgress) => {
-    if (!currentMap || appMode !== 'student') return;
-    const updatedHexes = currentMap.hexes.map(h => 
-        h.id === hexId ? { ...h, progress: status } : h
-    );
-    setCurrentMap({ ...currentMap, hexes: updatedHexes });
-    await storageService.updateStudentProgress(currentMap.mapId, hexId, status);
-    notify(`Progress saved: ${status.replace('_', ' ')}`);
+    
+    notify('Saving map...');
+    try {
+      const savedMap = await storageService.saveMap(currentMap);
+      setMaps(prev => {
+        const idx = prev.findIndex(m => m.mapId === savedMap.mapId);
+        if (idx >= 0) {
+          const newArr = [...prev];
+          newArr[idx] = savedMap;
+          return newArr;
+        }
+        return [...prev, savedMap];
+      });
+      setCurrentMap(savedMap);
+      notify('Map saved successfully.');
+    } catch (err) {
+      console.error(err);
+      notify('Error saving map.');
+    }
   };
 
   const handleAddHex = (type: 'core' | 'ext') => {
-    if (!currentMap || !builderMode) return;
+    if (!currentMap || !builderMode || !canEdit) return;
     const maxRow = currentMap.hexes.reduce((max, h) => Math.max(max, h.row), -1);
     const newHex: Hex = {
       id: `hex-${Date.now()}`,
@@ -409,19 +213,19 @@ export const App = () => {
   };
 
   const updateHex = (updatedHex: Hex) => {
-    if (!currentMap) return;
+    if (!currentMap || !canEdit) return;
     const newHexes = currentMap.hexes.map(h => h.id === updatedHex.id ? updatedHex : h);
     setCurrentMap({ ...currentMap, hexes: newHexes });
   };
 
   const moveHex = (hex: Hex, newRow: number, newCol: number) => {
-    if (!currentMap) return;
+    if (!currentMap || !canEdit) return;
     const updated = { ...hex, row: newRow, col: newCol };
     updateHex(updated);
   };
 
   const deleteHex = (hexId: string) => {
-    if (!currentMap) return;
+    if (!currentMap || !canEdit) return;
     if (window.confirm('Delete this hex?')) {
       setCurrentMap({
         ...currentMap,
@@ -431,29 +235,41 @@ export const App = () => {
     }
   };
 
-  // --- Connection Logic ---
-  const handleConnectionClick = (targetHex: Hex) => {
-      if (!isConnectionMode || !selectedHexId || !currentMap) return;
-      if (targetHex.id === selectedHexId) return;
+  const handleProgressUpdate = async (hexId: string, status: HexProgress) => {
+    if (!currentMap) return;
+    const updatedHexes = currentMap.hexes.map(h => 
+      h.id === hexId ? { ...h, progress: status } : h
+    );
+    setCurrentMap({ ...currentMap, hexes: updatedHexes });
+    await storageService.updateStudentProgress(currentMap.mapId, hexId, status);
+    notify(`Progress saved: ${status.replace('_', ' ')}`);
+  };
 
-      const sourceHex = currentMap.hexes.find(h => h.id === selectedHexId);
-      if (sourceHex) {
-          const exists = sourceHex.connections?.some(c => c.targetHexId === targetHex.id);
-          if (!exists) {
-              const newConn = { targetHexId: targetHex.id, type: 'default' as ConnectionType };
-              const updatedSource = {
-                  ...sourceHex,
-                  connections: [...(sourceHex.connections || []), newConn]
-              };
-              updateHex(updatedSource);
-              notify(`Connected to ${targetHex.label}`);
-          }
-      }
-      setIsConnectionMode(false);
+  const handleNewMap = async () => {
+    if (!canCreate) {
+      notify('You do not have permission to create maps.');
+      return;
+    }
+    const title = prompt("Enter title for new map:", "New Map");
+    if (!title) return;
+    notify('Creating...');
+    try {
+      const newMap = await storageService.createMap(title);
+      setMaps(prev => [...prev, newMap]);
+      setCurrentMap(newMap);
+      setBuilderMode(true);
+      notify('New map created!');
+    } catch (err) {
+      console.error(err);
+      notify('Error creating map.');
+    }
   };
 
   const handleDuplicate = async () => {
-    if (!currentMap) { notify('No map selected.'); return; }
+    if (!currentMap || !canCreate) {
+      notify('Cannot duplicate.');
+      return;
+    }
     const defaultTitle = `${currentMap.title} (Copy)`;
     const newTitle = prompt("Enter title for copy:", defaultTitle);
     if (!newTitle) return;
@@ -472,398 +288,386 @@ export const App = () => {
     }
   };
 
-  const handleNewMap = async () => {
-    const title = prompt("Enter title for new map:", "New Map");
-    if (!title) return;
-    notify('Creating...');
-    try {
-      const newMap = await storageService.createMap(title);
-      setMaps(prev => [...prev, newMap]);
-      setCurrentMap(newMap);
-      setBuilderMode(true);
-      notify('New map created!');
-    } catch (err) {
-      console.error(err);
-      notify('Error creating map.');
-    }
+  const handleAssignClass = async () => {
+    if (!currentMap || !canAssign) return;
+    if (!selectedClassId) { alert('Please select a class'); return; }
+    const count = await storageService.assignMapToClass(currentMap.mapId, selectedClassId);
+    notify(`Assigned to ${count} students in class.`);
   };
 
-  if (loading) return <div className="p-10 text-center text-slate-500">Loading learning environment...</div>;
+  // ========================================
+  // COMPUTED VALUES
+  // ========================================
 
   const selectedHex = currentMap?.hexes.find(h => h.id === selectedHexId);
   
-  // Calculate Grid Size
-  let maxRow = 0;
-  let maxCol = 0;
+  let maxRow = 0, maxCol = 0;
   currentMap?.hexes.forEach(h => {
-    maxRow = Math.max(maxRow, h.row || 0);
-    maxCol = Math.max(maxCol, h.col || 0);
+    maxRow = Math.max(maxRow, h.row);
+    maxCol = Math.max(maxCol, h.col);
   });
   
-  const gridWidth = Math.max((maxCol + 4) * HEX_METRICS.colSpacing, 1200);
-  const gridHeight = Math.max((maxRow + 5) * HEX_METRICS.rowSpacing, 800);
+  const gridWidth = Math.max((maxCol + 3) * HEX_METRICS.colSpacing, 800);
+  const gridHeight = Math.max((maxRow + 3) * HEX_METRICS.rowSpacing, 600);
 
-  const isTeacher = appMode === 'teacher';
-  const isStudent = appMode === 'student';
-  
-  const navUnits = units
-    .filter(u => u.courseId === navCourseId)
-    .sort((a,b) => (a.sequence||0) - (b.sequence||0));
+  // Determine if user is student for conditional rendering
+  const isStudentRole = user?.role === 'student';
 
-  // Check if we have no maps
-  const hasNoMaps = maps.length === 0;
+  // ========================================
+  // RENDER
+  // ========================================
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="h-dvh flex flex-col font-sans bg-[#f8f9fa] overflow-hidden text-slate-800">
+    <div className="min-h-screen flex flex-col max-w-7xl mx-auto px-4 py-6 font-sans relative text-slate-900">
       
-      {/* Notification Toast */}
-      {notification && (
-        <div className="fixed top-4 right-4 bg-slate-900 text-white px-4 py-2 rounded-lg shadow-lg z-[100] animate-in slide-in-from-top duration-200 border-l-4 border-indigo-500">
-          {notification}
-        </div>
-      )}
-      
-      {/* Header */}
-      <header className="flex-none bg-white border-b border-slate-300 px-4 py-3 flex justify-between items-center z-20 shadow-sm relative">
+      {/* ======== HEADER ======== */}
+      <header className="flex justify-between items-center mb-4 border-b border-slate-200 pb-4">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2 font-display">
-            Learning Map 
-            <span className={`text-[10px] md:text-xs font-semibold text-white px-2 py-0.5 rounded-full uppercase tracking-widest ${isTeacher ? 'bg-indigo-600' : 'bg-violet-600'}`}>
-              {appMode}
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            Learning Map Viewer 
+            <span className={`text-xs font-normal text-white px-2 py-0.5 rounded-full uppercase tracking-widest ${
+              isStudentRole ? 'bg-emerald-500' : 'bg-indigo-500'
+            }`}>
+              {user?.role || 'demo'}
             </span>
           </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            {isStudentRole ? 'Explore your learning path' : 'Design and manage learning paths'}
+          </p>
         </div>
         
-        {/* User & Connection Status */}
-        <div className="flex items-center gap-4 text-sm">
-          <ConnectionStatus 
-            mode={storageMode} 
-            onSettingsClick={() => setShowSettings(true)}
-            compact={true}
-          />
-          {user && (
-            <div className="hidden md:block text-slate-600">
-              <span className="font-semibold text-slate-800">{user.email.split('@')[0]}</span>
-            </div>
-          )}
+        {/* View Mode Toggle (center) */}
+        {currentMap && (
+          <div className="bg-slate-100 p-1 rounded-lg flex items-center gap-1 border border-slate-200">
+            <button 
+              onClick={() => setViewMode('map')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${
+                viewMode === 'map' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Hexagon size={14} /> Lesson Map
+            </button>
+            <button 
+              onClick={() => setViewMode('unit')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${
+                viewMode === 'unit' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Layout size={14} /> Unit Overview
+            </button>
+          </div>
+        )}
+
+        {/* Right side: Connection Status & Settings */}
+        <div className="flex items-center gap-3">
+          <ConnectionStatus mode={storageMode} onSettingsClick={() => setShowSettings(true)} />
+          
+          {/* Settings gear button */}
+          <button
+            onClick={() => setShowSettings(true)}
+            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+            title="Settings"
+          >
+            <Settings size={20} className="text-slate-500" />
+          </button>
         </div>
       </header>
 
-      {/* Main Content Flex Container */}
-      <div className="flex-1 flex min-h-0 relative">
-        
-        {/* Navigation Sidebar: Changes based on mode */}
-        {isStudent ? (
-           <StudentSidebar 
-             user={user} 
-             onOpenPortfolio={() => setShowPortfolio(true)} 
-             onViewDiploma={() => setViewMode('diploma')}
-             onViewMap={() => setViewMode('map')}
-           />
-        ) : (
-           <SidebarNav 
-              viewMode={viewMode === 'diploma' ? 'map' : viewMode}
-              setViewMode={(m) => setViewMode(m)}
-              onToggleDashboard={() => setShowDashboard(true)}
-              onToggleDevLog={() => setShowDevLog(true)}
-              showDevLog={true}
-          />
-        )}
-
-        {/* Content Area Column */}
-        <div className="flex-1 flex flex-col min-w-0">
+      {/* ======== TOOLBAR ======== */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 mb-4 sticky top-2 z-20 space-y-3">
+        <div className="flex flex-col lg:flex-row gap-4 justify-between items-center">
+          
+          {/* Left: Map selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 hidden sm:inline">Map:</span>
+            <select 
+              className="text-sm border-slate-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 max-w-[180px]"
+              value={currentMap?.mapId || ''}
+              onChange={(e) => handleMapChange(e.target.value)}
+              disabled={maps.length === 0}
+            >
+              {maps.length > 0 ? (
+                maps.map(m => <option key={m.mapId} value={m.mapId}>{m.title}</option>)
+              ) : (
+                <option>No maps available</option>
+              )}
+            </select>
             
-            {/* Toolbar - Hide in Diploma view */}
-            {viewMode !== 'diploma' && (
-            <div className="flex-none bg-white border-b border-slate-300 px-4 py-2 overflow-x-auto no-scrollbar z-10 shadow-sm relative">
-                <div className="flex items-center gap-4 min-w-max">
-                    
-                    {/* Nav Cluster */}
-                    <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-300">
-                        <select 
-                            value={navCourseId} 
-                            onChange={(e) => handleNavCourseChange(e.target.value)} 
-                            className="text-xs md:text-sm bg-transparent border-none focus:ring-0 font-semibold text-slate-700 max-w-[120px] md:max-w-none truncate"
-                        >
-                            <option value="">Select Course...</option>
-                            {courses.map(c => <option key={c.courseId} value={c.courseId}>{c.title}</option>)}
-                        </select>
-                        <ChevronRight size={14} className="text-slate-400"/>
-                        <select 
-                            value={navUnitId} 
-                            onChange={(e) => handleNavUnitChange(e.target.value)} 
-                            className="text-xs md:text-sm bg-transparent border-none focus:ring-0 font-semibold text-slate-700 max-w-[100px] md:max-w-[140px] truncate"
-                            disabled={!navCourseId}
-                        >
-                            <option value="">{navUnits.length ? 'Select Unit...' : '(No Units)'}</option>
-                            {navUnits.map(u => <option key={u.unitId} value={u.unitId}>{u.sequence ? `${u.sequence}. ` : ''}{u.title}</option>)}
-                        </select>
-                    </div>
-                    
-                    {/* Map Select */}
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-500 hidden sm:inline uppercase tracking-wider">Map:</span>
-                        <select 
-                            className="text-xs md:text-sm border-slate-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 max-w-[120px] md:max-w-[180px] py-1 font-medium text-slate-700"
-                            value={currentMap?.mapId || ''}
-                            onChange={(e) => handleMapChange(e.target.value)}
-                            disabled={maps.length === 0}
-                        >
-                            {maps.length > 0 ? (
-                                maps.map(m => <option key={m.mapId} value={m.mapId}>{m.title}</option>)
-                            ) : (
-                                <option>No maps available</option>
-                            )}
-                        </select>
-                    </div>
+            {/* Dev Log - only for teachers */}
+            <RequireEditor>
+              <button 
+                onClick={() => setShowDevLog(true)} 
+                className="text-slate-400 hover:text-indigo-600 transition-colors p-1"
+                title="Dev Log / Sprint Board"
+              >
+                <Bug size={16} />
+              </button>
+            </RequireEditor>
+          </div>
 
-                    {/* Teacher Controls */}
-                    {isTeacher && (
-                    <div className="flex items-center gap-3 border-l border-slate-300 pl-3">
-                        <label className={`flex items-center gap-2 text-xs font-bold px-2 py-1.5 rounded-lg border cursor-pointer select-none transition-colors ${builderMode ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100'}`}>
-                        <input 
-                            type="checkbox" 
-                            checked={builderMode} 
-                            onChange={(e) => setBuilderMode(e.target.checked)}
-                            className="rounded border-slate-400 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
-                        />
-                        <span className="whitespace-nowrap">Edit Mode</span>
-                        </label>
+          {/* Right: Builder controls */}
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            
+            {/* TEACHER/ADMIN ONLY: Builder mode toggle */}
+            <RequireEditor>
+              <label className={`flex items-center gap-2 text-sm font-medium mr-2 px-3 py-1.5 rounded-lg border cursor-pointer select-none transition-colors ${
+                builderMode 
+                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700' 
+                  : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+              }`}>
+                <input 
+                  type="checkbox" 
+                  checked={builderMode} 
+                  onChange={(e) => setBuilderMode(e.target.checked)}
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                {builderMode ? 'Editing On' : 'Editing Off'}
+              </label>
+            </RequireEditor>
 
-                        {builderMode && (
-                        <>
-                            {/* New Map Button - ALWAYS VISIBLE in edit mode */}
-                            <button 
-                                onClick={handleNewMap} 
-                                className="btn-secondary text-xs flex items-center gap-1 whitespace-nowrap font-semibold bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                                title="Create New Map"
-                            >
-                                <Layers size={14}/> New Map
-                            </button>
+            {/* Builder mode controls - only show when builder mode is on */}
+            {builderMode && canEdit && (
+              <>
+                <div className="h-6 w-px bg-slate-300 mx-1 hidden sm:block"></div>
+                
+                {viewMode === 'map' && (
+                  <>
+                    <button onClick={() => handleAddHex('core')} className="btn-secondary text-xs flex items-center gap-1">
+                      <Plus size={14} /> Core
+                    </button>
+                    <button onClick={() => handleAddHex('ext')} className="btn-secondary text-xs flex items-center gap-1">
+                      <Plus size={14} /> Ext
+                    </button>
+                    <div className="h-6 w-px bg-slate-300 mx-1 hidden sm:block"></div>
+                  </>
+                )}
+                
+                <button onClick={() => init()} className="btn-secondary text-xs" title="Reload">
+                  <RefreshCw size={14} />
+                </button>
+                <button onClick={handleSave} className="btn-primary text-xs flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md shadow-sm transition-colors">
+                  <Save size={14} /> Save
+                </button>
 
-                            {/* Only show hex buttons if we have a map */}
-                            {currentMap && viewMode === 'map' && (
-                            <>
-                                <button onClick={() => handleAddHex('core')} className="btn-secondary text-xs flex items-center gap-1 whitespace-nowrap font-semibold">
-                                    <Plus size={14} /> Core
-                                </button>
-                                <button onClick={() => handleAddHex('ext')} className="btn-secondary text-xs flex items-center gap-1 whitespace-nowrap font-semibold">
-                                    <Plus size={14} /> Ext
-                                </button>
-                                <button onClick={handleSave} className="btn-primary text-xs flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md shadow-sm transition-colors whitespace-nowrap font-semibold">
-                                <Save size={14} /> Save
-                                </button>
-                                <button onClick={() => setShowAssignmentModal(true)} className="btn-secondary text-xs flex items-center gap-1 bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100" title="Assign Map">
-                                    <Users size={14}/> Assign
-                                </button>
-                                <button onClick={handleDuplicate} className="btn-secondary text-xs" title="Duplicate Map"><Copy size={14}/></button>
-                            </>
-                            )}
-                        </>
-                        )}
-                    </div>
-                    )}
-                </div>
-            </div>
+                {/* Assignment controls */}
+                {canAssign && (
+                  <>
+                    <div className="h-6 w-px bg-slate-300 mx-1 hidden sm:block"></div>
+                    <select 
+                      value={selectedClassId}
+                      onChange={(e) => setSelectedClassId(e.target.value)}
+                      className="text-xs border-slate-300 rounded-md py-1 w-32"
+                    >
+                      <option value="">Class...</option>
+                      {classes.map(c => (
+                        <option key={c.classId} value={c.classId}>
+                          {c.className}
+                        </option>
+                      ))}
+                    </select>
+                    <button onClick={handleAssignClass} className="btn-secondary text-xs" title="Assign to Class">
+                      <Users size={14} />
+                    </button>
+                  </>
+                )}
+
+                <div className="h-6 w-px bg-slate-300 mx-1 hidden sm:block"></div>
+                
+                <button onClick={() => setShowDashboard(!showDashboard)} className={`btn-secondary text-xs ${showDashboard ? 'bg-indigo-50 border-indigo-200' : ''}`} title="Dashboard">
+                  <PieChart size={14} />
+                </button>
+
+                <div className="h-6 w-px bg-slate-300 mx-1 hidden sm:block"></div>
+
+                <button onClick={handleNewMap} className="btn-secondary text-xs" title="New Map">
+                  <Layers size={14}/>
+                </button>
+                <button onClick={handleDuplicate} className="btn-secondary text-xs" title="Duplicate">
+                  <Copy size={14}/>
+                </button>
+              </>
             )}
 
-            {/* View Content Wrapper */}
-            <div className="flex-1 relative overflow-hidden flex flex-row">
-                
-                {/* Primary View Area */}
-                <div className="flex-1 relative overflow-hidden flex flex-col isolate z-0">
-                    {/* Connection Mode Overlay Hint */}
-                    {isConnectionMode && (
-                        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-indigo-600 text-white px-4 py-2 rounded-full shadow-lg text-sm font-bold flex items-center gap-2 animate-in fade-in slide-in-from-top">
-                            <span>Select a hex to connect to</span>
-                            <button onClick={() => setIsConnectionMode(false)} className="bg-white/20 hover:bg-white/30 rounded-full p-0.5">
-                                <ChevronRight size={16} className="rotate-180" /> Cancel
-                            </button>
-                        </div>
-                    )}
-
-                    {viewMode === 'map' ? (
-                        <div className="flex-1 bg-white relative overflow-auto touch-pan-x touch-pan-y" ref={mapGridRef}>
-                            {currentMap ? (
-                                <div 
-                                    className="relative"
-                                    style={{ width: gridWidth, height: gridHeight }}
-                                >
-                                    <HexGridBackground />
-                                    <ConnectionLayer hexes={currentMap.hexes} />
-
-                                    <h2 className="absolute top-4 left-6 text-xl font-bold text-slate-400 pointer-events-none z-0">
-                                        {currentMap.title}
-                                    </h2>
-
-                                    {currentMap.hexes.map((hex) => (
-                                        <HexNode 
-                                            key={hex.id}
-                                            hex={hex}
-                                            gridMetrics={HEX_METRICS}
-                                            isSelected={hex.id === selectedHexId}
-                                            isBuilderMode={builderMode}
-                                            isConnectionMode={isConnectionMode}
-                                            onSelect={(h) => !isConnectionMode && setSelectedHexId(h.id)}
-                                            onPositionChange={moveHex}
-                                            onConnectionClick={handleConnectionClick}
-                                            filters={filters}
-                                        />
-                                    ))}
-
-                                    {/* Empty map state - has map but no hexes */}
-                                    {currentMap.hexes.length === 0 && builderMode && (
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 gap-4">
-                                            <p className="text-lg">This map is empty</p>
-                                            <p className="text-sm">Click "+ Core" or "+ Ext" to add your first hex</p>
-                                        </div>
-                                    )}
-                                </div>
-                            ) : (
-                                /* NO MAP EXISTS - Show create button prominently */
-                                <div className="flex flex-col items-center justify-center h-full text-slate-500 p-8 text-center gap-6">
-                                    {isTeacher ? (
-                                        <>
-                                            <div className="text-6xl">🗺️</div>
-                                            <div>
-                                                <h2 className="text-2xl font-bold text-slate-700 mb-2">No Maps Yet</h2>
-                                                <p className="text-slate-500 mb-6">Create your first learning map to get started!</p>
-                                            </div>
-                                            <button 
-                                                onClick={handleNewMap}
-                                                className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition-colors flex items-center gap-3 shadow-lg hover:shadow-xl"
-                                            >
-                                                <Layers size={24}/> Create New Map
-                                            </button>
-                                            <p className="text-xs text-slate-400 mt-4">
-                                                Tip: Enable "Edit Mode" in the toolbar to add hexes to your map
-                                            </p>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div className="text-6xl">📚</div>
-                                            <p className="text-lg">No maps assigned to you yet.</p>
-                                            <p className="text-sm text-slate-400">Check back later or contact your teacher.</p>
-                                        </>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    ) : viewMode === 'diploma' ? (
-                        <DiplomaView />
-                    ) : (
-                        currentMap ? (
-                            <UbDPlanner 
-                                map={currentMap} 
-                                onChange={setCurrentMap}
-                                isBuilderMode={builderMode && isTeacher}
-                                isFullScreen={true}
-                            />
-                        ) : (
-                            <div className="flex-1 flex items-center justify-center text-slate-500 bg-slate-50">
-                                Select a map to view the unit plan
-                            </div>
-                        )
-                    )}
-                </div>
-
-                {/* Side Panel / Overlay Wrapper */}
-                <ResponsivePanel 
-                    isOpen={!!selectedHexId && viewMode === 'map'} 
-                    onClose={() => setSelectedHexId(null)}
-                    title={builderMode ? 'Edit Hex' : 'Activity Details'}
-                >
-                    {viewMode === 'map' && selectedHex && (
-                        builderMode && isTeacher ? (
-                            <EditorPanel 
-                                hex={selectedHex} 
-                                onChange={updateHex} 
-                                onDelete={deleteHex}
-                                curriculum={curriculum}
-                                availableTargets={currentMap?.hexes || []}
-                                onEnterConnectionMode={() => setIsConnectionMode(true)}
-                            />
-                        ) : (
-                            <StudentPanel 
-                                hex={selectedHex} 
-                                teacherEmail={currentMap?.teacherEmail}
-                                mapTitle={currentMap?.title || ''}
-                                onUpdateProgress={appMode === 'student' ? handleProgressUpdate : undefined}
-                            />
-                        )
-                    )}
-                </ResponsivePanel>
-            </div>
+            {/* Student read-only indicator */}
+            {isStudentRole && (
+              <div className="text-xs text-slate-400 italic">
+                Read-only • {maps.length} maps assigned
+              </div>
+            )}
+          </div>
         </div>
 
+        {/* Filters row */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-600 border-t border-slate-100 pt-2">
+          <span className="font-bold flex items-center gap-1"><Filter size={12}/> Highlight:</span>
+          <label className="flex items-center gap-1 cursor-pointer">
+            <input type="checkbox" checked={filters.linkedOnly} onChange={e => setFilters({...filters, linkedOnly: e.target.checked})} className="rounded text-indigo-600 focus:ring-indigo-500" />
+            Linked Only
+          </label>
+        </div>
       </div>
 
-      {/* Mobile Bottom Navigation */}
-      {!isStudent && (
-      <MobileNavBar 
-         viewMode={viewMode === 'diploma' ? 'map' : viewMode}
-         setViewMode={(m) => setViewMode(m)}
-         onToggleDashboard={() => setShowDashboard(true)}
-         onToggleDevLog={() => setShowDevLog(true)}
-         showDevLog={isTeacher}
-      />
-      )}
+      {/* ======== MAIN CONTENT ======== */}
+      <div className="flex flex-col md:flex-row flex-1 overflow-hidden gap-4 relative">
+        
+        {viewMode === 'map' ? (
+          <>
+            {/* Map Grid */}
+            <div className="flex-1 map-grid-bg rounded-xl border border-slate-200 overflow-auto relative shadow-inner min-h-[500px]" ref={mapGridRef}>
+              {currentMap ? (
+                <div 
+                  className="relative transition-all duration-300"
+                  style={{ width: gridWidth, height: gridHeight }}
+                >
+                  <h2 className="absolute top-4 left-6 text-xl font-bold text-slate-400 pointer-events-none z-0">
+                    {currentMap.title}
+                  </h2>
 
-      {/* Overlays */}
-      {showDashboard && currentMap && <DashboardPanel map={currentMap} onClose={() => setShowDashboard(false)} />}
+                  {currentMap.hexes.map((hex) => (
+                    <HexNode 
+                      key={hex.id}
+                      hex={hex}
+                      gridMetrics={HEX_METRICS}
+                      isSelected={hex.id === selectedHexId}
+                      isBuilderMode={builderMode && canEdit}
+                      isConnectionMode={false}
+                      onSelect={(h) => setSelectedHexId(h.id)}
+                      onPositionChange={moveHex}
+                      onConnectionClick={() => {}}
+                      filters={filters}
+                    />
+                  ))}
+
+                  {currentMap.hexes.length === 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center text-slate-400">
+                      {builderMode && canEdit ? 'Click "+ Core" to add your first hex' : 'This map is empty'}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-full text-slate-400">
+                  {canEdit ? 'Select or Create a Map' : 'No maps assigned to you.'}
+                </div>
+              )}
+            </div>
+
+            {/* Dashboard Overlay */}
+            {showDashboard && currentMap && (
+              <DashboardPanel map={currentMap} onClose={() => setShowDashboard(false)} />
+            )}
+
+            {/* Side Panel - Editor for teachers, Student panel for students */}
+            {builderMode && canEdit && selectedHex ? (
+              <div className="hidden md:block w-80 shrink-0">
+                <EditorPanel 
+                  hex={selectedHex} 
+                  onChange={updateHex} 
+                  onDelete={deleteHex}
+                  curriculum={curriculum}
+                />
+              </div>
+            ) : selectedHex && currentMap ? (
+              <div className="hidden md:block w-80 shrink-0">
+                <StudentPanel 
+                  hex={selectedHex} 
+                  teacherEmail={currentMap.teacherEmail}
+                  mapTitle={currentMap.title}
+                  onUpdateProgress={handleProgressUpdate}
+                />
+              </div>
+            ) : builderMode && canEdit ? (
+              <div className="hidden md:flex bg-white border border-dashed rounded-lg p-6 w-72 flex-shrink-0 ml-4 items-center justify-center text-center text-slate-400 text-sm italic">
+                Select a hex to edit properties
+              </div>
+            ) : null}
+          </>
+        ) : (
+          /* Unit Overview */
+          currentMap ? (
+            <UbDPlanner 
+              map={currentMap} 
+              onChange={setCurrentMap}
+              isBuilderMode={builderMode && canEdit}
+              isFullScreen={true}
+            />
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-slate-400 border border-slate-200 rounded-xl bg-slate-50">
+              Select a map to view the unit plan
+            </div>
+          )
+        )}
+      </div>
+
+      {/* ======== MODALS ======== */}
+      
+      {/* Dev Log */}
       {showDevLog && <DevLogPanel onClose={() => setShowDevLog(false)} />}
-      {showPortfolio && <PortfolioModal onClose={() => setShowPortfolio(false)} />}
       
-      {showAssignmentModal && currentMap && (
-        <AssignmentModal 
-            onClose={() => setShowAssignmentModal(false)}
-            mapId={currentMap.mapId}
-            mapTitle={currentMap.title}
-        />
-      )}
-      
-      {showSetupWizard && (
-        <SetupWizard
-          onComplete={handleSetupComplete}
-          onSkip={handleSetupSkip}
-          statusResponse={apiStatus || undefined}
-        />
-      )}
-
+      {/* Settings */}
       {showSettings && (
-        <SettingsPanel
-          onClose={() => setShowSettings(false)}
+        <SettingsPanel 
+          onClose={() => setShowSettings(false)} 
           currentMode={storageMode}
           onModeChange={handleModeChange}
-          onSetupRequired={handleSetupRequired}
+          onSetupRequired={() => {
+            setShowSettings(false);
+            setShowSetupWizard(true);
+          }}
         />
       )}
 
-      {/* Dev Mode Switcher (Bottom Right) */}
-      <div className="hidden md:flex fixed bottom-4 right-4 bg-white/90 backdrop-blur border border-slate-300 p-2 rounded-lg shadow-lg z-[80] gap-2 text-xs">
-        <span className="font-bold text-slate-600 self-center px-1">MODE:</span>
-        <button onClick={() => toggleAppMode('teacher')} className={`px-3 py-1.5 rounded font-semibold ${appMode === 'teacher' ? 'bg-indigo-600 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}>Teacher</button>
-        <button onClick={() => toggleAppMode('student')} className={`px-3 py-1.5 rounded font-semibold ${appMode === 'student' ? 'bg-indigo-600 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}>Student</button>
-      </div>
-      
-      {/* Mobile Mode Switcher */}
-      <div className="md:hidden fixed top-3 right-16 z-[80]">
-          <button 
-            onClick={() => toggleAppMode(appMode === 'teacher' ? 'student' : 'teacher')}
-            className="bg-white/90 border border-slate-300 px-2 py-1 rounded text-[10px] font-bold shadow-sm text-slate-800"
-          >
-              {appMode === 'teacher' ? '👨‍🏫 T' : '👨‍🎓 S'}
-          </button>
-      </div>
+      {/* Setup Wizard */}
+      {showSetupWizard && (
+        <SetupWizard 
+           onComplete={() => { setShowSetupWizard(false); handleModeChange('api'); }}
+           onSkip={() => { setShowSetupWizard(false); handleModeChange('mock'); }}
+        />
+      )}
 
+      {/* Notification Toast */}
+      {notification && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-lg shadow-lg text-sm z-50 animate-in fade-in slide-in-from-bottom-4">
+          {notification}
+        </div>
+      )}
+
+      {/* Styles */}
       <style>{`
         .btn-secondary {
           @apply px-3 py-1.5 rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors shadow-sm;
         }
-        .pb-safe-area {
-            padding-bottom: env(safe-area-inset-bottom);
+        .btn-primary {
+          @apply px-3 py-1.5 rounded-md border border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-sm;
+        }
+        .map-grid-bg {
+          background: radial-gradient(circle at top left, #eff6ff, #f9fafb);
         }
       `}</style>
     </div>
   );
 };
+
+// ============================================================
+// APP WRAPPER WITH AUTH PROVIDER
+// ============================================================
+
+export const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+};
+
+export default App;
