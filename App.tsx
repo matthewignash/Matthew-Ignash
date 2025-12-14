@@ -17,6 +17,7 @@ import { SidebarNav } from './components/SidebarNav';
 import { StudentSidebar } from './components/StudentSidebar';
 import { DiplomaView } from './components/DiplomaView';
 import { PortfolioModal } from './components/PortfolioModal';
+import { AssignmentModal } from './components/AssignmentModal';
 import { ChevronRight, Save, Plus, Copy, Users, Layers, Download, School, FileText, Table, Bug, PieChart, Filter, RefreshCw, User as UserIcon, Layout, Hexagon, Cloud } from 'lucide-react';
 
 const HEX_METRICS = {
@@ -147,6 +148,7 @@ export const App = () => {
   const [showDevLog, setShowDevLog] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [showPortfolio, setShowPortfolio] = useState(false);
+  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   
   // Navigation State
   const [navCourseId, setNavCourseId] = useState<string>('');
@@ -218,11 +220,8 @@ export const App = () => {
       setCourses(loadedCourses);
       setUnits(loadedUnits);
       
-      if (isStudent) {
-          setUser({ email: 'student@school.edu', name: 'Sarah Jenkins' });
-      } else {
-          setUser(loadedUser);
-      }
+      // Removed hardcoded student mock. Now relies on backend to provide user identity.
+      setUser(loadedUser);
       
       if (loadedMaps.length > 0) {
         const existing = currentMap ? loadedMaps.find(m => m.mapId === currentMap.mapId) : null;
@@ -654,6 +653,9 @@ export const App = () => {
                                 <button onClick={handleSave} className="btn-primary text-xs flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md shadow-sm transition-colors whitespace-nowrap font-semibold">
                                 <Save size={14} /> Save
                                 </button>
+                                <button onClick={() => setShowAssignmentModal(true)} className="btn-secondary text-xs flex items-center gap-1 bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100" title="Assign Map">
+                                    <Users size={14}/> Assign
+                                </button>
                                 <button onClick={handleDuplicate} className="btn-secondary text-xs" title="Duplicate Map"><Copy size={14}/></button>
                             </>
                             )}
@@ -811,6 +813,14 @@ export const App = () => {
       {showDashboard && currentMap && <DashboardPanel map={currentMap} onClose={() => setShowDashboard(false)} />}
       {showDevLog && <DevLogPanel onClose={() => setShowDevLog(false)} />}
       {showPortfolio && <PortfolioModal onClose={() => setShowPortfolio(false)} />}
+      
+      {showAssignmentModal && currentMap && (
+        <AssignmentModal 
+            onClose={() => setShowAssignmentModal(false)}
+            mapId={currentMap.mapId}
+            mapTitle={currentMap.title}
+        />
+      )}
       
       {showSetupWizard && (
         <SetupWizard
