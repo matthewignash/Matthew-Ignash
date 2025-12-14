@@ -27,7 +27,7 @@ const HEX_METRICS = {
 };
 
 type AppMode = 'teacher' | 'student';
-type ViewMode = 'map' | 'unit' | 'diploma'; // Added diploma
+type ViewMode = 'map' | 'unit' | 'diploma';
 
 // Helper to calculate hex center for connections
 const getHexCenter = (row: number, col: number) => {
@@ -60,7 +60,6 @@ const HexGridBackground = () => {
 };
 
 const ConnectionLayer = ({ hexes }: { hexes: Hex[] }) => {
-    // Collect all connections
     const connections: { start: {x:number,y:number}, end: {x:number,y:number}, type: ConnectionType, id: string }[] = [];
     
     hexes.forEach(source => {
@@ -82,10 +81,10 @@ const ConnectionLayer = ({ hexes }: { hexes: Hex[] }) => {
 
     const getColor = (type: ConnectionType) => {
         switch(type) {
-            case 'conditional': return '#f97316'; // Orange
-            case 'remedial': return '#10b981'; // Emerald
-            case 'extension': return '#8b5cf6'; // Violet
-            default: return '#94a3b8'; // Slate 400
+            case 'conditional': return '#f97316';
+            case 'remedial': return '#10b981';
+            case 'extension': return '#8b5cf6';
+            default: return '#94a3b8';
         }
     };
     
@@ -311,7 +310,6 @@ export const App = () => {
     setBuilderMode(false);
     setSelectedHexId(null);
     setShowDashboard(false);
-    // Reset view if needed, but keeping it simple
     if (newMode === 'student') setViewMode('map'); 
     
     const url = new URL(window.location.href);
@@ -437,7 +435,7 @@ export const App = () => {
   // --- Connection Logic ---
   const handleConnectionClick = (targetHex: Hex) => {
       if (!isConnectionMode || !selectedHexId || !currentMap) return;
-      if (targetHex.id === selectedHexId) return; // Cannot connect to self
+      if (targetHex.id === selectedHexId) return;
 
       const sourceHex = currentMap.hexes.find(h => h.id === selectedHexId);
       if (sourceHex) {
@@ -452,7 +450,7 @@ export const App = () => {
               notify(`Connected to ${targetHex.label}`);
           }
       }
-      setIsConnectionMode(false); // Exit mode after connecting
+      setIsConnectionMode(false);
   };
 
   const handleDuplicate = async () => {
@@ -513,6 +511,9 @@ export const App = () => {
     .filter(u => u.courseId === navCourseId)
     .sort((a,b) => (a.sequence||0) - (b.sequence||0));
 
+  // Check if we have no maps
+  const hasNoMaps = maps.length === 0;
+
   return (
     <div className="h-dvh flex flex-col font-sans bg-[#f8f9fa] overflow-hidden text-slate-800">
       
@@ -523,7 +524,7 @@ export const App = () => {
         </div>
       )}
       
-      {/* Header - Only show full header if not in student mode to save space, or simplify */}
+      {/* Header */}
       <header className="flex-none bg-white border-b border-slate-300 px-4 py-3 flex justify-between items-center z-20 shadow-sm relative">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2 font-display">
@@ -630,23 +631,32 @@ export const App = () => {
                         <span className="whitespace-nowrap">Edit Mode</span>
                         </label>
 
-                        {builderMode && viewMode === 'map' && (
+                        {builderMode && (
                         <>
-                            <button onClick={() => handleAddHex('core')} className="btn-secondary text-xs flex items-center gap-1 whitespace-nowrap font-semibold">
-                                <Plus size={14} /> Core
+                            {/* New Map Button - ALWAYS VISIBLE in edit mode */}
+                            <button 
+                                onClick={handleNewMap} 
+                                className="btn-secondary text-xs flex items-center gap-1 whitespace-nowrap font-semibold bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                                title="Create New Map"
+                            >
+                                <Layers size={14}/> New Map
                             </button>
-                            <button onClick={() => handleAddHex('ext')} className="btn-secondary text-xs flex items-center gap-1 whitespace-nowrap font-semibold">
-                                <Plus size={14} /> Ext
-                            </button>
-                            <button onClick={handleSave} className="btn-primary text-xs flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md shadow-sm transition-colors whitespace-nowrap font-semibold">
-                            <Save size={14} /> Save
-                            </button>
-                            {/* More tools hidden on mobile or scrollable */}
-                            <div className="hidden lg:flex items-center gap-2">
-                                <div className="h-4 w-px bg-slate-300 mx-1"></div>
-                                <button onClick={handleNewMap} className="btn-secondary text-xs" title="New Map"><Layers size={14}/></button>
-                                <button onClick={handleDuplicate} className="btn-secondary text-xs" title="Duplicate"><Copy size={14}/></button>
-                            </div>
+
+                            {/* Only show hex buttons if we have a map */}
+                            {currentMap && viewMode === 'map' && (
+                            <>
+                                <button onClick={() => handleAddHex('core')} className="btn-secondary text-xs flex items-center gap-1 whitespace-nowrap font-semibold">
+                                    <Plus size={14} /> Core
+                                </button>
+                                <button onClick={() => handleAddHex('ext')} className="btn-secondary text-xs flex items-center gap-1 whitespace-nowrap font-semibold">
+                                    <Plus size={14} /> Ext
+                                </button>
+                                <button onClick={handleSave} className="btn-primary text-xs flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md shadow-sm transition-colors whitespace-nowrap font-semibold">
+                                <Save size={14} /> Save
+                                </button>
+                                <button onClick={handleDuplicate} className="btn-secondary text-xs" title="Duplicate Map"><Copy size={14}/></button>
+                            </>
+                            )}
                         </>
                         )}
                     </div>
@@ -658,7 +668,7 @@ export const App = () => {
             {/* View Content Wrapper */}
             <div className="flex-1 relative overflow-hidden flex flex-row">
                 
-                {/* Primary View Area - Z-0 with Isolation */}
+                {/* Primary View Area */}
                 <div className="flex-1 relative overflow-hidden flex flex-col isolate z-0">
                     {/* Connection Mode Overlay Hint */}
                     {isConnectionMode && (
@@ -678,8 +688,6 @@ export const App = () => {
                                     style={{ width: gridWidth, height: gridHeight }}
                                 >
                                     <HexGridBackground />
-
-                                    {/* Connection Layer - Rendered behind hexes */}
                                     <ConnectionLayer hexes={currentMap.hexes} />
 
                                     <h2 className="absolute top-4 left-6 text-xl font-bold text-slate-400 pointer-events-none z-0">
@@ -700,10 +708,42 @@ export const App = () => {
                                             filters={filters}
                                         />
                                     ))}
+
+                                    {/* Empty map state - has map but no hexes */}
+                                    {currentMap.hexes.length === 0 && builderMode && (
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 gap-4">
+                                            <p className="text-lg">This map is empty</p>
+                                            <p className="text-sm">Click "+ Core" or "+ Ext" to add your first hex</p>
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
-                                <div className="flex items-center justify-center h-full text-slate-400 p-8 text-center">
-                                    {isTeacher ? 'Select or Create a Map' : 'No maps assigned to you.'}
+                                /* NO MAP EXISTS - Show create button prominently */
+                                <div className="flex flex-col items-center justify-center h-full text-slate-500 p-8 text-center gap-6">
+                                    {isTeacher ? (
+                                        <>
+                                            <div className="text-6xl">🗺️</div>
+                                            <div>
+                                                <h2 className="text-2xl font-bold text-slate-700 mb-2">No Maps Yet</h2>
+                                                <p className="text-slate-500 mb-6">Create your first learning map to get started!</p>
+                                            </div>
+                                            <button 
+                                                onClick={handleNewMap}
+                                                className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition-colors flex items-center gap-3 shadow-lg hover:shadow-xl"
+                                            >
+                                                <Layers size={24}/> Create New Map
+                                            </button>
+                                            <p className="text-xs text-slate-400 mt-4">
+                                                Tip: Enable "Edit Mode" in the toolbar to add hexes to your map
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="text-6xl">📚</div>
+                                            <p className="text-lg">No maps assigned to you yet.</p>
+                                            <p className="text-sm text-slate-400">Check back later or contact your teacher.</p>
+                                        </>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -725,7 +765,7 @@ export const App = () => {
                     )}
                 </div>
 
-                {/* Side Panel / Overlay Wrapper - HIGH Z-INDEX */}
+                {/* Side Panel / Overlay Wrapper */}
                 <ResponsivePanel 
                     isOpen={!!selectedHexId && viewMode === 'map'} 
                     onClose={() => setSelectedHexId(null)}
@@ -756,7 +796,7 @@ export const App = () => {
 
       </div>
 
-      {/* Mobile Bottom Navigation - Only for Teacher, student uses sidebar menu (hidden on mobile in this implementation) */}
+      {/* Mobile Bottom Navigation */}
       {!isStudent && (
       <MobileNavBar 
          viewMode={viewMode === 'diploma' ? 'map' : viewMode}
