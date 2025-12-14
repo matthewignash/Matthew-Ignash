@@ -54,7 +54,8 @@ export const HexNode: React.FC<HexNodeProps> = ({
 
   // --- Layout Calculation ---
   const getBasePosition = (r: number, c: number) => {
-    const xOffset = (r % 2 === 0) ? 0 : gridMetrics.colSpacing / 2;
+    // Offset every other row
+    const xOffset = (r % 2 === 0) ? 0 : gridMetrics.width / 2; // Fixed geometric offset
     const left = c * gridMetrics.colSpacing + xOffset + 20; // +20 margin
     const top = r * gridMetrics.rowSpacing + 20;
     return { x: left, y: top };
@@ -67,33 +68,33 @@ export const HexNode: React.FC<HexNodeProps> = ({
   // --- Size Styles ---
   let width = gridMetrics.width;
   let height = gridMetrics.height;
-  let iconSize = 24;
+  let iconSize = 28;
   let textSize = 'text-xs';
 
   if (hex.size === 'large') {
     width *= 1.3;
     height *= 1.3;
-    iconSize = 32;
+    iconSize = 36;
     textSize = 'text-sm';
   } else if (hex.size === 'small') {
     width *= 0.8;
     height *= 0.8;
-    iconSize = 18;
+    iconSize = 20;
     textSize = 'text-[10px]';
   }
 
   // --- Visual Config based on Type/Status ---
   // Core = Blue, Student = Violet, Ext = Emerald, Scaf = Amber, Class = Pink
   const getTheme = (type: string, status?: string) => {
-    if (status === 'locked') return { fill: '#f1f5f9', stroke: '#cbd5e1', text: '#94a3b8' }; // Slate-100/300/400
+    if (status === 'locked') return { fill: '#f8fafc', stroke: '#cbd5e1', text: '#94a3b8', bgOpacity: 0.9 }; // Slate
     
     switch (type) {
-        case 'core': return { fill: '#ffffff', stroke: '#3b82f6', text: '#334155' }; // Blue-500
-        case 'ext': return { fill: '#ffffff', stroke: '#10b981', text: '#334155' }; // Emerald-500
-        case 'scaf': return { fill: '#ffffff', stroke: '#f59e0b', text: '#334155' }; // Amber-500
-        case 'student': return { fill: '#8b5cf6', stroke: '#7c3aed', text: '#ffffff' }; // Violet-500/600
-        case 'class': return { fill: '#ffffff', stroke: '#ec4899', text: '#334155' }; // Pink-500
-        default: return { fill: '#ffffff', stroke: '#94a3b8', text: '#334155' };
+        case 'core': return { fill: '#ffffff', stroke: '#3b82f6', text: '#1e293b', bgOpacity: 1 }; // Blue-500
+        case 'ext': return { fill: '#ffffff', stroke: '#10b981', text: '#1e293b', bgOpacity: 1 }; // Emerald-500
+        case 'scaf': return { fill: '#ffffff', stroke: '#f59e0b', text: '#1e293b', bgOpacity: 1 }; // Amber-500
+        case 'student': return { fill: '#8b5cf6', stroke: '#7c3aed', text: '#ffffff', bgOpacity: 1 }; // Violet-500 (Filled)
+        case 'class': return { fill: '#ffffff', stroke: '#ec4899', text: '#1e293b', bgOpacity: 1 }; // Pink-500
+        default: return { fill: '#ffffff', stroke: '#94a3b8', text: '#334155', bgOpacity: 1 };
     }
   };
 
@@ -124,8 +125,9 @@ export const HexNode: React.FC<HexNodeProps> = ({
       setIsDragging(false);
       const approxRow = Math.round((dragPos.y - 20) / gridMetrics.rowSpacing);
       const approxRowClean = Math.max(0, approxRow);
+      // Correct geometric calculation for drop target
       const isOddRow = approxRowClean % 2 !== 0;
-      const xOffset = isOddRow ? gridMetrics.colSpacing / 2 : 0;
+      const xOffset = isOddRow ? gridMetrics.width / 2 : 0;
       const approxCol = Math.round((dragPos.x - 20 - xOffset) / gridMetrics.colSpacing);
       const approxColClean = Math.max(0, approxCol);
       onPositionChange(hex, approxRowClean, approxColClean);
@@ -200,9 +202,9 @@ export const HexNode: React.FC<HexNodeProps> = ({
 
   return (
     <div
-        className={`absolute transition-transform duration-200 
-        ${isBuilderMode ? 'cursor-move' : hasLink ? 'cursor-pointer hover:scale-105' : 'cursor-default'}
-        ${isSelected ? 'z-20' : 'z-10 hover:z-20'}
+        className={`absolute transition-all duration-200 group
+        ${isBuilderMode ? 'cursor-move' : hasLink ? 'cursor-pointer' : 'cursor-default'}
+        ${isSelected ? 'z-30 scale-105' : 'z-10 hover:z-40 hover:scale-110'} 
         ${isDimmed ? 'opacity-30 grayscale' : 'opacity-100'}
         `}
         style={{
@@ -210,8 +212,7 @@ export const HexNode: React.FC<HexNodeProps> = ({
             height: height,
             left: currentX,
             top: currentY,
-            // SVG Filter handles shadow, but CSS filter is easier for the whole shape
-            filter: 'drop-shadow(0px 4px 6px rgba(0,0,0,0.15))'
+            filter: isSelected ? 'drop-shadow(0 10px 8px rgb(0 0 0 / 0.15))' : 'drop-shadow(0 4px 3px rgb(0 0 0 / 0.07))'
         }}
         onMouseDown={(e) => { if (isBuilderMode) { e.preventDefault(); startDrag(e.clientX, e.clientY); }}}
         onTouchStart={(e) => { if (isBuilderMode) { startDrag(e.touches[0].clientX, e.touches[0].clientY); }}}
@@ -224,7 +225,8 @@ export const HexNode: React.FC<HexNodeProps> = ({
                 points={points} 
                 fill={theme.fill} 
                 stroke={theme.stroke} 
-                strokeWidth={isSelected ? 4 : 2}
+                strokeWidth={isSelected ? 4 : 2.5}
+                strokeLinejoin="round"
                 className="transition-colors duration-200"
             />
             
@@ -235,16 +237,22 @@ export const HexNode: React.FC<HexNodeProps> = ({
         </svg>
 
         {/* Content Overlay */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-2 text-center">
-            <div style={{ fontSize: iconSize }} className="leading-none mb-1">{hex.icon || '⬡'}</div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-4 text-center">
+            {/* Icon */}
+            <div style={{ fontSize: iconSize }} className="leading-none mb-1 drop-shadow-sm">{hex.icon || '⬡'}</div>
+            
+            {/* Label with improved clamping and readability */}
             <div 
-                className={`font-bold leading-tight ${textSize} line-clamp-2 px-1`} 
-                style={{ color: theme.text }}
+                className={`font-bold leading-tight ${textSize} line-clamp-3 px-1`} 
+                style={{ 
+                    color: theme.text,
+                    textShadow: hex.type === 'student' ? '0 1px 2px rgba(0,0,0,0.1)' : '0 1px 0 rgba(255,255,255,0.8)' // Contrast aid
+                }}
             >
                 {hex.label}
             </div>
             
-             <div className="text-[8px] opacity-40 font-mono absolute bottom-4 text-slate-500">
+             <div className="text-[8px] opacity-0 group-hover:opacity-60 font-mono absolute bottom-4 text-slate-500 transition-opacity">
                 {hex.row}, {hex.col}
              </div>
         </div>
@@ -253,12 +261,12 @@ export const HexNode: React.FC<HexNodeProps> = ({
         {!isBuilderMode && (
             <>
                 {hex.curriculum?.sbarDomains?.length ? (
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -mt-1 bg-slate-800 text-white text-[9px] px-1.5 rounded-full shadow-sm whitespace-nowrap z-30">
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -mt-1.5 bg-slate-800 text-white text-[9px] px-1.5 py-0.5 rounded-full shadow-sm whitespace-nowrap z-30 font-bold tracking-wider border border-white">
                         {hex.curriculum.sbarDomains.join('/')}
                     </div>
                 ) : null}
                 {hasLink && (
-                     <div className="absolute bottom-1 right-2 text-xs opacity-50 z-30">🔗</div>
+                     <div className="absolute bottom-1 right-2 text-xs opacity-50 z-30 hover:opacity-100">🔗</div>
                 )}
             </>
         )}

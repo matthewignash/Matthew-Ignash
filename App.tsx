@@ -1,13 +1,17 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Hex, LearningMap, ClassGroup, User, HexTemplate, CurriculumConfig, HexProgress, Course, Unit } from './types';
-import { storageService } from './services/storage';
+import { storageService, getStorageMode, setStorageMode, subscribeToModeChanges, StorageMode } from './services/storage';
+import { apiService, StatusResponse } from './services/api';
 import { HexNode } from './components/HexNode';
 import { EditorPanel } from './components/EditorPanel';
 import { StudentPanel } from './components/StudentPanel';
 import { DevLogPanel } from './components/DevLogPanel';
 import { DashboardPanel } from './components/DashboardPanel';
 import { UbDPlanner } from './components/UbDPlanner';
-import { ChevronRight, Save, Plus, Copy, RotateCcw, Users, Layers, Download, BookOpen, GraduationCap, School, FileText, Table, Bug, PieChart, Filter, RefreshCw, User as UserIcon, Layout, Hexagon } from 'lucide-react';
+import { SetupWizard } from './components/SetupWizard';
+import { ConnectionStatus } from './components/ConnectionStatus';
+import { SettingsPanel } from './components/SettingsPanel';
+import { ChevronRight, Save, Plus, Copy, RotateCcw, Users, Layers, Download, BookOpen, GraduationCap, School, FileText, Table, Bug, PieChart, Filter, RefreshCw, User as UserIcon, Layout, Hexagon, Cloud } from 'lucide-react';
 
 const HEX_METRICS = {
   width: 110,     
@@ -52,8 +56,38 @@ export const App = () => {
     sbar: { K: false, T: false, C: false }
   });
 
+  // Connection & Setup State (NEW for Story 2)
+  const [storageMode, setStorageModeState] = useState<StorageMode>(getStorageMode());
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiStatus, setApiStatus] = useState<StatusResponse | null>(null);
+
   // Refs
   const mapGridRef = useRef<HTMLDivElement>(null);
+
+  // Subscribe to storage mode changes
+  useEffect(() => {
+    const unsubscribe = subscribeToModeChanges(setStorageModeState);
+    return unsubscribe;
+  }, []);
+
+  // Check API status on load when in API mode
+  useEffect(() => {
+    const checkApi = async () => {
+      if (storageMode === 'api' && apiService.isConfigured()) {
+        try {
+          const status = await apiService.checkStatus();
+          setApiStatus(status);
+          if (status.needsSetup) {
+            setShowSetupWizard(true);
+          }
+        } catch (e) {
+          console.error('API check failed:', e);
+        }
+      }
+    };
+    checkApi();
+  }, [storageMode]);
 
   // Router Logic & Initialization
   useEffect(() => {
@@ -143,6 +177,30 @@ export const App = () => {
   const notify = (msg: string) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), 3000);
+  };
+
+  // Connection handlers (NEW for Story 2)
+  const handleModeChange = (mode: StorageMode) => {
+    setStorageMode(mode);
+    setStorageModeState(mode);
+    init();
+  };
+
+  const handleSetupComplete = () => {
+    setShowSetupWizard(false);
+    setStorageMode('api');
+    setStorageModeState('api');
+    init();
+  };
+
+  const handleSetupSkip = () => {
+    setShowSetupWizard(false);
+    setStorageMode('mock');
+    setStorageModeState('mock');
+  };
+
+  const handleSetupRequired = () => {
+    setShowSetupWizard(true);
   };
 
   const toggleAppMode = (newMode: AppMode) => {
@@ -416,6 +474,13 @@ export const App = () => {
   return (
     <div className="min-h-screen flex flex-col max-w-7xl mx-auto px-4 py-6 font-sans relative">
       
+      {/* Notification Toast */}
+      {notification && (
+        <div className="fixed top-4 right-4 bg-slate-800 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-in slide-in-from-top duration-200">
+          {notification}
+        </div>
+      )}
+      
       {/* Header */}
       <header className="flex justify-between items-center mb-4 border-b border-slate-200 pb-4">
         <div>
@@ -448,11 +513,19 @@ export const App = () => {
             </div>
         )}
 
-        {user && (
-            <div className="flex items-center gap-4 text-sm">
-                <div className="text-slate-500">Logged in as <span className="font-medium text-slate-700">{user.email}</span></div>
+        {/* User & Connection Status */}
+        <div className="flex items-center gap-4 text-sm">
+          <ConnectionStatus 
+            mode={storageMode} 
+            onSettingsClick={() => setShowSettings(true)}
+            compact={true}
+          />
+          {user && (
+            <div className="text-slate-500">
+              Logged in as <span className="font-medium text-slate-700">{user.email}</span>
             </div>
-        )}
+          )}
+        </div>
       </header>
 
       {/* Toolbar & Filters */}
@@ -516,6 +589,16 @@ export const App = () => {
                     <Bug size={16} />
                 </button>
             )}
+
+            {/* Connect Backend button when in mock mode */}
+            {storageMode === 'mock' && isTeacher && (
+              <button
+                onClick={() => setShowSettings(true)}
+                className="text-xs text-indigo-600 hover:text-indigo-700 flex items-center gap-1 ml-2"
+              >
+                <Cloud size={14} /> Connect Backend
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -541,7 +624,6 @@ export const App = () => {
                   <>
                     <div className="h-6 w-px bg-slate-300 mx-1 hidden sm:block"></div>
                     
-                    {/* Only show hex add buttons if in Map View */}
                     {viewMode === 'map' && (
                         <>
                             <button onClick={() => handleAddHex('core')} className="btn-secondary text-xs flex items-center gap-1">
@@ -574,7 +656,6 @@ export const App = () => {
 
                     <div className="h-6 w-px bg-slate-300 mx-1 hidden sm:block"></div>
                     
-                    {/* Class & Assignment Controls */}
                     <div className="flex items-center gap-1 relative">
                         <select 
                             value={selectedClassId}
@@ -647,11 +728,9 @@ export const App = () => {
                 C (Comm)
             </label>
 
-            {/* Breadcrumb / Selectors Display (Right Aligned) */}
             <div className="flex-1"></div>
             
             {builderMode && isTeacher ? (
-              /* Editable Course/Unit Selectors for Builder Mode */
               <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-400 font-bold tracking-wide mr-1">LINK:</span>
                   <select 
@@ -674,7 +753,6 @@ export const App = () => {
                   </select>
               </div>
             ) : (
-              /* Read-only Breadcrumbs for Student/View Mode */
               <div className="flex items-center gap-1 text-slate-400 italic">
                {course ? (
                  <span className="flex items-center gap-1">
@@ -756,7 +834,6 @@ export const App = () => {
                             curriculum={curriculum}
                         />
                     ) : (
-                        // Placeholder when nothing selected in builder
                          <div className="hidden md:flex bg-white border border-dashed rounded-lg p-6 w-72 flex-shrink-0 ml-4 items-center justify-center text-center text-slate-400 text-sm italic">
                             Select a hex to edit properties
                          </div>
@@ -774,7 +851,6 @@ export const App = () => {
                 )}
             </>
         ) : (
-            /* Unit Overview Full Screen Mode */
             currentMap ? (
                  <UbDPlanner 
                     map={currentMap} 
@@ -792,6 +868,25 @@ export const App = () => {
 
       {/* Dev Log Panel */}
       {showDevLog && <DevLogPanel onClose={() => setShowDevLog(false)} />}
+
+      {/* Setup Wizard (NEW for Story 2) */}
+      {showSetupWizard && (
+        <SetupWizard
+          onComplete={handleSetupComplete}
+          onSkip={handleSetupSkip}
+          statusResponse={apiStatus || undefined}
+        />
+      )}
+
+      {/* Settings Panel (NEW for Story 2) */}
+      {showSettings && (
+        <SettingsPanel
+          onClose={() => setShowSettings(false)}
+          currentMode={storageMode}
+          onModeChange={handleModeChange}
+          onSetupRequired={handleSetupRequired}
+        />
+      )}
 
       {/* Dev Mode Switcher */}
       <div className="fixed bottom-4 right-4 bg-white/90 backdrop-blur border border-slate-300 p-2 rounded-lg shadow-lg z-50 flex gap-2 text-xs">

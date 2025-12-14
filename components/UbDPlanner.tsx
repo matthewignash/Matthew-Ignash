@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { LearningMap } from '../types';
+import { genaiService } from '../services/genai';
+import { Upload, Sparkles, Loader2 } from 'lucide-react';
 
 interface UbDPlannerProps {
   map: LearningMap;
@@ -10,6 +12,8 @@ interface UbDPlannerProps {
 }
 
 export const UbDPlanner: React.FC<UbDPlannerProps> = ({ map, onChange, onClose, isBuilderMode, isFullScreen = false }) => {
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const ubd = map.ubdData || {};
 
   const handleUpdate = (field: keyof typeof ubd, value: any) => {
@@ -24,6 +28,55 @@ export const UbDPlanner: React.FC<UbDPlannerProps> = ({ map, onChange, onClose, 
 
   const handleListUpdate = (field: 'essentialQuestions', value: string) => {
     handleUpdate(field, value.split('\n'));
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsAnalyzing(true);
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64String = reader.result as string;
+        try {
+          const extractedData = await genaiService.parseCurriculumImage(base64String);
+          
+          // Merge logic: Don't overwrite if existing data is present, unless empty
+          const newUbd = { ...ubd };
+          
+          if (extractedData.bigIdea) {
+             newUbd.bigIdea = ubd.bigIdea ? `${ubd.bigIdea}\n\n[Imported]: ${extractedData.bigIdea}` : extractedData.bigIdea;
+          }
+          if (extractedData.essentialQuestions && extractedData.essentialQuestions.length > 0) {
+             newUbd.essentialQuestions = [...(ubd.essentialQuestions || []), ...extractedData.essentialQuestions];
+          }
+          if (extractedData.stage1_understandings) {
+             newUbd.stage1_understandings = ubd.stage1_understandings ? `${ubd.stage1_understandings}\n\n[Imported]: ${extractedData.stage1_understandings}` : extractedData.stage1_understandings;
+          }
+          if (extractedData.stage1_knowledge_skills) {
+             newUbd.stage1_knowledge_skills = ubd.stage1_knowledge_skills ? `${ubd.stage1_knowledge_skills}\n\n[Imported]: ${extractedData.stage1_knowledge_skills}` : extractedData.stage1_knowledge_skills;
+          }
+          
+          onChange({
+             ...map,
+             ubdData: newUbd
+          });
+          
+        } catch (err) {
+          console.error("Failed to analyze image", err);
+          alert("Failed to analyze curriculum image. Check API configuration.");
+        } finally {
+          setIsAnalyzing(false);
+          // Reset input
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error(error);
+      setIsAnalyzing(false);
+    }
   };
 
   // Helper: Render Input (Builder) or Styled Text (View)
@@ -46,7 +99,7 @@ export const UbDPlanner: React.FC<UbDPlannerProps> = ({ map, onChange, onClose, 
         <div className="mb-4">
              <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{label}</h5>
              {value ? (
-                 <div className="text-sm text-slate-800 whitespace-pre-wrap bg-slate-50 p-2 rounded border border-slate-100">{value}</div>
+                 <div className="text-sm text-slate-800 whitespace-pre-wrap bg-slate-50 p-2 rounded border border-slate-100 font-mono text-[13px]">{value}</div>
              ) : (
                  <div className="text-xs text-slate-400 italic">Not defined</div>
              )}
@@ -82,6 +135,38 @@ export const UbDPlanner: React.FC<UbDPlannerProps> = ({ map, onChange, onClose, 
       );
   };
 
+  // Import Control
+  const ImportControl = () => (
+      <>
+        <input 
+            type="file" 
+            accept="image/*" 
+            ref={fileInputRef} 
+            onChange={handleImageUpload} 
+            className="hidden" 
+        />
+        <button 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isAnalyzing}
+            className={`flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg border transition-all
+            ${isAnalyzing 
+                ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-wait' 
+                : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300'
+            }`}
+        >
+            {isAnalyzing ? (
+                <>
+                    <Loader2 size={14} className="animate-spin" /> Analyzing...
+                </>
+            ) : (
+                <>
+                    <Sparkles size={14} /> Import Curriculum Image
+                </>
+            )}
+        </button>
+      </>
+  );
+
   // Full Screen Dashboard Layout
   if (isFullScreen) {
       return (
@@ -91,8 +176,11 @@ export const UbDPlanner: React.FC<UbDPlannerProps> = ({ map, onChange, onClose, 
                 {/* Header Section */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 relative">
                     {isBuilderMode && (
-                        <div className="absolute top-4 right-4 bg-indigo-50 text-indigo-700 px-3 py-1 rounded text-xs font-bold uppercase border border-indigo-100">
-                            Editing Mode
+                        <div className="absolute top-4 right-4 flex gap-2">
+                             <ImportControl />
+                             <div className="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg text-xs font-bold uppercase border border-indigo-100 flex items-center">
+                                Editing Mode
+                            </div>
                         </div>
                     )}
                     <h1 className="text-2xl font-bold text-slate-900 mb-1">{map.title}</h1>
@@ -154,6 +242,16 @@ export const UbDPlanner: React.FC<UbDPlannerProps> = ({ map, onChange, onClose, 
         <h3 className="font-bold text-slate-800">Unit Planning</h3>
         {onClose && <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>}
       </div>
+      
+      {/* Import in sidebar */}
+      {isBuilderMode && (
+         <div className="px-4 py-2 border-b border-slate-100 bg-white">
+             <div className="flex justify-center">
+                <ImportControl />
+             </div>
+         </div>
+      )}
+
       <div className="p-4 space-y-6">
         {renderText("Big Idea", ubd.bigIdea, 'bigIdea')}
         {renderList("Essential Questions", ubd.essentialQuestions, 'essentialQuestions')}

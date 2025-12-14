@@ -63,10 +63,10 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({ map, onClose }) 
             <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">By Type</h3>
             <div className="space-y-1">
                 {Object.entries(analytics.countsByType).map(([type, count]) => (
-                    count > 0 && (
+                    (count as number) > 0 && (
                         <div key={type} className="flex justify-between items-center text-xs">
                             <span className="capitalize text-slate-600">{type}</span>
-                            <span className="font-medium text-slate-800">{count}</span>
+                            <span className="font-medium text-slate-800">{count as number}</span>
                         </div>
                     )
                 ))}
