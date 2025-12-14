@@ -5,7 +5,7 @@
  * Provides typed methods for each endpoint.
  */
 
-import { LearningMap, HexProgress } from '../types';
+import { LearningMap, HexProgress, Course, Unit, ClassGroup, HexTemplate, CurriculumConfig, User } from '../types';
 
 // API Response Types
 export interface ApiResponse<T = any> {
@@ -297,7 +297,6 @@ class ApiService {
     const result = await this.post<CreateResponse>('create', body);
     
     if (result.success) {
-      // Re-check status after creation
       await this.checkStatus();
     }
 
@@ -311,7 +310,6 @@ class ApiService {
     const result = await this.post<AttachResponse>('attach', { sheetId });
     
     if (result.success) {
-      // Re-check status after attachment
       await this.checkStatus();
     }
 
@@ -331,27 +329,58 @@ class ApiService {
     return result;
   }
 
-  // ==================== Data Endpoints (Story 3+) ====================
+  // ==================== Data Endpoints ====================
 
-  /**
-   * Get all maps (placeholder for Story 3)
-   */
   async getMaps(): Promise<ApiResponse<LearningMap[]>> {
     return this.get<LearningMap[]>('getMaps');
   }
 
-  /**
-   * Save a map (placeholder for Story 3)
-   */
   async saveMap(map: LearningMap): Promise<ApiResponse<LearningMap>> {
     return this.post<LearningMap>('saveMap', map);
   }
 
-  /**
-   * Update student progress (placeholder for Story 4)
-   */
+  async duplicateMap(sourceId: string, newTitle: string): Promise<ApiResponse<LearningMap>> {
+    return this.post<LearningMap>('duplicateMap', { sourceId, newTitle });
+  }
+
   async updateProgress(mapId: string, hexId: string, status: HexProgress): Promise<ApiResponse> {
     return this.post('updateProgress', { mapId, hexId, status });
+  }
+
+  async getCourses(): Promise<ApiResponse<Course[]>> {
+    return this.get<Course[]>('getCourses');
+  }
+
+  async getUnits(): Promise<ApiResponse<Unit[]>> {
+    return this.get<Unit[]>('getUnits');
+  }
+
+  async getClasses(): Promise<ApiResponse<ClassGroup[]>> {
+    return this.get<ClassGroup[]>('getClasses');
+  }
+
+  async getHexTemplates(): Promise<ApiResponse<HexTemplate[]>> {
+    return this.get<HexTemplate[]>('getHexTemplates');
+  }
+
+  async getCurriculumConfig(): Promise<ApiResponse<CurriculumConfig>> {
+    return this.get<CurriculumConfig>('getCurriculumConfig');
+  }
+
+  async getCurrentUser(): Promise<ApiResponse<User>> {
+    return this.get<User>('getCurrentUser');
+  }
+
+  async assignMapToClass(mapId: string, classId: string): Promise<ApiResponse<{count: number}>> {
+    return this.post('assignMap', { mapId, classId });
+  }
+
+  async assignMapToStudents(mapId: string, emails: string[]): Promise<ApiResponse<{count: number}>> {
+    return this.post('assignMap', { mapId, emails });
+  }
+  
+  async getStudentProgress(mapId: string): Promise<ApiResponse<any>> {
+      return this.get('getStudentProgress', { mapId });
   }
 }
 

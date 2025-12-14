@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { X, Plus, ExternalLink, FileText, Monitor, PenTool, Mic } from 'lucide-react';
 
