@@ -46,7 +46,7 @@ export const UbDPlanner: React.FC<UbDPlannerProps> = ({ map, onChange, onClose, 
         <div className="mb-4">
              <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{label}</h5>
              {value ? (
-                 <div className="text-sm text-slate-800 whitespace-pre-wrap bg-slate-50 p-2 rounded border border-slate-100">{value}</div>
+                 <div className="text-sm text-slate-800 whitespace-pre-wrap bg-slate-50 p-2 rounded border border-slate-100 font-mono text-[13px]">{value}</div>
              ) : (
                  <div className="text-xs text-slate-400 italic">Not defined</div>
              )}

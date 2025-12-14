@@ -2,10 +2,58 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root {
+  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Space Grotesk', sans-serif;
+  
+  /* Prototype Palette */
+  --c-ext: #10b981;
+  --c-core: #3b82f6;
+  --c-scaf: #f97316;
+  --c-lock: #cbd5e1;
+  --c-student: #8b5cf6;
+  --c-class: #ec4899;
+}
+
 body {
-  background-color: #f1f5f9; /* Slate 100 matches var(--bg-color) */
+  font-family: var(--font-ui);
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
+}
+
+/* Improve scrollbar visibility */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.05);
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .map-grid-bg {
-  background: radial-gradient(circle at top left, #eff6ff, #f9fafb);
+  background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Animation Utilities */
+.animate-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }

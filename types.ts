@@ -1,7 +1,17 @@
+
 export type HexType = 'core' | 'ext' | 'scaf' | 'student' | 'class';
 export type HexStatus = 'locked' | 'completed' | '';
 export type HexSize = 'large' | 'small' | 'default';
 export type HexProgress = 'not_started' | 'in_progress' | 'completed' | 'mastered';
+
+// New: Connection Types for branching logic
+export type ConnectionType = 'default' | 'conditional' | 'remedial' | 'extension';
+
+export interface HexConnection {
+  targetHexId: string;
+  type: ConnectionType;
+  label?: string; // Optional logic text e.g. "Score > 80%"
+}
 
 export interface HexCurriculum {
   sbarDomains?: string[];
@@ -32,6 +42,7 @@ export interface Hex {
   col: number;
   curriculum?: HexCurriculum;
   progress?: HexProgress;
+  connections?: HexConnection[]; // New: Adjacency list
 }
 
 export interface HexTemplate {

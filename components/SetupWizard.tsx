@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { apiService, StatusResponse, CreateResponse, AttachResponse } from '../services/api';
 import { Database, Link, Plus, AlertCircle, CheckCircle, Loader2, Server, ExternalLink } from 'lucide-react';
@@ -10,6 +11,9 @@ interface SetupWizardProps {
 
 type SetupStep = 'choose' | 'create' | 'attach' | 'success' | 'error';
 
+// The specific backend sheet provided by the user
+const DEFAULT_SHEET_ID = '14dSth8Ow2m65RBxeQRVWmwcAuyjYhV0DH1A-VqV4fEQ';
+
 export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip, statusResponse }) => {
   const [step, setStep] = useState<SetupStep>('choose');
   const [loading, setLoading] = useState(false);
@@ -18,7 +22,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip, st
   
   // Form state
   const [backendName, setBackendName] = useState('Learning Map - Backend');
-  const [sheetId, setSheetId] = useState('');
+  const [sheetId, setSheetId] = useState(DEFAULT_SHEET_ID);
 
   const handleCreate = async () => {
     setLoading(true);
@@ -85,6 +89,25 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip, st
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
+        {/* Attach Existing Option - Primary Choice now */}
+        <button
+          onClick={() => setStep('attach')}
+          className="p-6 border-2 border-emerald-200 bg-emerald-50/50 rounded-xl hover:border-emerald-400 hover:bg-emerald-100 transition-all text-left group relative"
+        >
+          <div className="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-200/50 px-2 py-1 rounded-full">
+            Recommended
+          </div>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-emerald-100 rounded-lg group-hover:bg-emerald-200 transition-colors">
+              <Link className="w-5 h-5 text-emerald-600" />
+            </div>
+            <h3 className="font-semibold text-slate-800">Attach Existing</h3>
+          </div>
+          <p className="text-sm text-slate-600">
+            Connect to the "Project Learning Map" spreadsheet you provided.
+          </p>
+        </button>
+
         {/* Create New Option */}
         <button
           onClick={() => setStep('create')}
@@ -97,23 +120,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip, st
             <h3 className="font-semibold text-slate-800">Create New Backend</h3>
           </div>
           <p className="text-sm text-slate-500">
-            Create a new Google Spreadsheet to store your data. Best for first-time setup.
-          </p>
-        </button>
-
-        {/* Attach Existing Option */}
-        <button
-          onClick={() => setStep('attach')}
-          className="p-6 border-2 border-slate-200 rounded-xl hover:border-emerald-300 hover:bg-emerald-50 transition-all text-left group"
-        >
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-emerald-100 rounded-lg group-hover:bg-emerald-200 transition-colors">
-              <Link className="w-5 h-5 text-emerald-600" />
-            </div>
-            <h3 className="font-semibold text-slate-800">Attach Existing</h3>
-          </div>
-          <p className="text-sm text-slate-500">
-            Connect to an existing Learning Map spreadsheet. Use if you have a backup or shared sheet.
+            Create a fresh Google Spreadsheet to store your data.
           </p>
         </button>
       </div>
@@ -222,7 +229,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete, onSkip, st
           placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
         />
         <p className="text-xs text-slate-400 mt-1">
-          Find this in the spreadsheet URL: docs.google.com/spreadsheets/d/<strong>SPREADSHEET_ID</strong>/edit
+          Pre-filled with your provided backend sheet ID.
         </p>
       </div>
 

@@ -1,3 +1,4 @@
+
 import { LearningMap, ClassGroup, Hex, HexTemplate, CurriculumConfig, StudentProgressRecord, HexProgress, DevTask, User, Course, Unit } from '../types';
 import { apiService } from './api';
 
@@ -93,7 +94,11 @@ const DEFAULT_MAP: LearningMap = {
       status: 'completed',
       progress: 'completed',
       curriculum: { sbarDomains: ['KU', 'SCI.1'], standards: ['NGSS-HS-PS1-1'] },
-      linkUrl: 'https://example.com/intro'
+      linkUrl: 'https://example.com/intro',
+      connections: [
+        { targetHexId: 'h2', type: 'default' },
+        { targetHexId: 'h3', type: 'default' }
+      ]
     },
     { 
       id: 'h2', 
@@ -105,7 +110,10 @@ const DEFAULT_MAP: LearningMap = {
       status: 'completed',
       progress: 'in_progress',
       curriculum: { sbarDomains: ['TT', 'SCI.1'], atlSkills: ['Critical Thinking'] },
-      linkUrl: 'https://example.com/protons'
+      linkUrl: 'https://example.com/protons',
+      connections: [
+        { targetHexId: 'h4', type: 'extension' }
+      ]
     },
     { 
       id: 'h3', 
@@ -116,7 +124,10 @@ const DEFAULT_MAP: LearningMap = {
       col: 0,
       progress: 'not_started',
       linkUrl: 'https://example.com/electrons',
-      curriculum: { sbarDomains: ['C'] }
+      curriculum: { sbarDomains: ['C'] },
+      connections: [
+        { targetHexId: 'h5', type: 'default' }
+      ]
     },
     { 
       id: 'h4', 
@@ -224,6 +235,7 @@ function normalizeMap(map: LearningMap): LearningMap {
     if (!Array.isArray(m.hexes)) m.hexes = [];
     m.hexes.forEach((hex: Hex) => {
         if (!hex.curriculum) hex.curriculum = {};
+        if (!hex.connections) hex.connections = [];
         const c = hex.curriculum;
         if (!Array.isArray(c.competencies)) c.competencies = [];
         if (!Array.isArray(c.atlSkills)) c.atlSkills = [];
@@ -613,7 +625,7 @@ export const storageService = {
 
   // Assignment methods
   assignMapToClass: (mapId: string, classId: string) => mockStorage.assignMapToClass(mapId, classId),
-  assignMapToStudents: (mapId: string, emails: string[]) => mockStorage.assignMapToStudents(mapId, emails),
+  assignMapToStudents: (mapId: string, emails: string[]): Promise<number> => mockStorage.assignMapToStudents(mapId, emails),
 
   // Export methods (local only)
   exportMapToDoc: (map: LearningMap) => mockStorage.exportMapToDoc(map),
