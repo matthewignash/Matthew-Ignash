@@ -8,16 +8,25 @@
 import { LearningMap, HexProgress, Course, Unit, ClassGroup, HexTemplate, CurriculumConfig, User } from '../types';
 
 // API Response Types
-export interface ApiResponse<T = any> {
+export interface ApiResponse {
   success: boolean;
-  data?: T;
   error?: string;
   code?: number;
   _timing?: string;
+  // Response data fields
+  maps?: LearningMap[];
+  map?: LearningMap;
+  courses?: Course[];
+  units?: Unit[];
+  classes?: ClassGroup[];
+  templates?: HexTemplate[];
+  curriculum?: CurriculumConfig;
+  user?: User;
+  progress?: Record<string, any>;
+  [key: string]: any;
 }
 
-export interface StatusResponse {
-  success: boolean;
+export interface StatusResponse extends ApiResponse {
   configured: boolean;
   needsSetup: boolean;
   needsMigration?: boolean;
@@ -27,31 +36,22 @@ export interface StatusResponse {
   spreadsheetId?: string;
   spreadsheetName?: string;
   message?: string;
-  error?: string;
 }
 
-export interface CreateResponse {
-  success: boolean;
+export interface CreateResponse extends ApiResponse {
   spreadsheetId?: string;
   spreadsheetUrl?: string;
   spreadsheetName?: string;
   schemaVersion?: number;
-  message?: string;
-  error?: string;
-  code?: number;
 }
 
-export interface AttachResponse {
-  success: boolean;
+export interface AttachResponse extends ApiResponse {
   spreadsheetId?: string;
   spreadsheetName?: string;
   schemaVersion?: number;
   needsMigration?: boolean;
   currentVersion?: number;
   requiredVersion?: number;
-  message?: string;
-  error?: string;
-  code?: number;
 }
 
 // Connection state
@@ -183,15 +183,17 @@ class ApiService {
   /**
    * Make a GET request to the API
    */
-  private async get<T>(action: string, params: Record<string, string> = {}): Promise<ApiResponse<T>> {
+  private async get<T extends ApiResponse = ApiResponse>(action: string, params: Record<string, string | number | boolean | undefined> = {}): Promise<T> {
     if (!this.apiUrl) {
-      return { success: false, error: 'API URL not configured', code: 0 };
+      return { success: false, error: 'API URL not configured', code: 0 } as T;
     }
 
     const url = new URL(this.apiUrl);
     url.searchParams.set('action', action);
     Object.entries(params).forEach(([key, value]) => {
-      url.searchParams.set(key, value);
+      if (value !== undefined) {
+        url.searchParams.set(key, String(value));
+      }
     });
 
     try {
@@ -203,19 +205,19 @@ class ApiService {
       });
 
       const data = await response.json();
-      return data as ApiResponse<T>;
+      return data as T;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Network error';
-      return { success: false, error: message, code: 0 };
+      return { success: false, error: message, code: 0 } as T;
     }
   }
 
   /**
    * Make a POST request to the API
    */
-  private async post<T>(action: string, body: Record<string, any> = {}): Promise<ApiResponse<T>> {
+  private async post<T extends ApiResponse = ApiResponse>(action: string, body: Record<string, any> = {}): Promise<T> {
     if (!this.apiUrl) {
-      return { success: false, error: 'API URL not configured', code: 0 };
+      return { success: false, error: 'API URL not configured', code: 0 } as T;
     }
 
     const url = new URL(this.apiUrl);
@@ -232,10 +234,10 @@ class ApiService {
       });
 
       const data = await response.json();
-      return data as ApiResponse<T>;
+      return data as T;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Network error';
-      return { success: false, error: message, code: 0 };
+      return { success: false, error: message, code: 0 } as T;
     }
   }
 
@@ -260,7 +262,7 @@ class ApiService {
     }
 
     // Handle the response
-    const statusResult = result as unknown as StatusResponse;
+    const statusResult = result;
     
     if (statusResult.needsSetup) {
       this.updateConnectionInfo({ 
@@ -300,7 +302,7 @@ class ApiService {
       await this.checkStatus();
     }
 
-    return result as unknown as CreateResponse;
+    return result;
   }
 
   /**
@@ -313,7 +315,7 @@ class ApiService {
       await this.checkStatus();
     }
 
-    return result as unknown as AttachResponse;
+    return result;
   }
 
   /**
@@ -331,56 +333,60 @@ class ApiService {
 
   // ==================== Data Endpoints ====================
 
-  async getMaps(): Promise<ApiResponse<LearningMap[]>> {
-    return this.get<LearningMap[]>('getMaps');
+  async getMaps(): Promise<ApiResponse> {
+    return this.get('getMaps');
   }
 
-  async saveMap(map: LearningMap): Promise<ApiResponse<LearningMap>> {
-    return this.post<LearningMap>('saveMap', map);
+  async getMap(mapId: string): Promise<ApiResponse> {
+    return this.get('getMap', { mapId });
   }
 
-  async duplicateMap(sourceId: string, newTitle: string): Promise<ApiResponse<LearningMap>> {
-    return this.post<LearningMap>('duplicateMap', { sourceId, newTitle });
+  async saveMap(map: LearningMap): Promise<ApiResponse> {
+    return this.post('saveMap', map);
   }
 
-  async updateProgress(mapId: string, hexId: string, status: HexProgress): Promise<ApiResponse> {
-    return this.post('updateProgress', { mapId, hexId, status });
+  async duplicateMap(sourceId: string, newTitle: string): Promise<ApiResponse> {
+    return this.post('duplicateMap', { sourceId, newTitle });
   }
 
-  async getCourses(): Promise<ApiResponse<Course[]>> {
-    return this.get<Course[]>('getCourses');
+  async saveProgress(mapId: string, hexId: string, status: HexProgress, score?: number): Promise<ApiResponse> {
+    return this.post('updateProgress', { mapId, hexId, status, score });
   }
 
-  async getUnits(): Promise<ApiResponse<Unit[]>> {
-    return this.get<Unit[]>('getUnits');
+  async getProgress(mapId: string): Promise<ApiResponse> {
+    return this.get('getStudentProgress', { mapId });
   }
 
-  async getClasses(): Promise<ApiResponse<ClassGroup[]>> {
-    return this.get<ClassGroup[]>('getClasses');
+  async getCourses(): Promise<ApiResponse> {
+    return this.get('getCourses');
   }
 
-  async getHexTemplates(): Promise<ApiResponse<HexTemplate[]>> {
-    return this.get<HexTemplate[]>('getHexTemplates');
+  async getUnits(): Promise<ApiResponse> {
+    return this.get('getUnits');
   }
 
-  async getCurriculumConfig(): Promise<ApiResponse<CurriculumConfig>> {
-    return this.get<CurriculumConfig>('getCurriculumConfig');
+  async getClasses(): Promise<ApiResponse> {
+    return this.get('getClasses');
   }
 
-  async getCurrentUser(): Promise<ApiResponse<User>> {
-    return this.get<User>('getCurrentUser');
+  async getTemplates(): Promise<ApiResponse> {
+    return this.get('getHexTemplates');
   }
 
-  async assignMapToClass(mapId: string, classId: string): Promise<ApiResponse<{count: number}>> {
+  async getCurriculum(): Promise<ApiResponse> {
+    return this.get('getCurriculumConfig');
+  }
+
+  async whoAmI(): Promise<ApiResponse> {
+    return this.get('getCurrentUser');
+  }
+
+  async assignMapToClass(mapId: string, classId: string): Promise<ApiResponse> {
     return this.post('assignMap', { mapId, classId });
   }
 
-  async assignMapToStudents(mapId: string, emails: string[]): Promise<ApiResponse<{count: number}>> {
+  async assignMapToStudents(mapId: string, emails: string[]): Promise<ApiResponse> {
     return this.post('assignMap', { mapId, emails });
-  }
-  
-  async getStudentProgress(mapId: string): Promise<ApiResponse<any>> {
-      return this.get('getStudentProgress', { mapId });
   }
 }
 
