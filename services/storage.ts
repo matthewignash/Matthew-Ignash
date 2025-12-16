@@ -2,7 +2,6 @@
  * Storage Service - NO MOCK DATA
  * 
  * Uses API when connected, falls back to localStorage when offline.
- * All the fake courses/maps have been REMOVED.
  */
 
 import { 
@@ -19,6 +18,18 @@ const STORAGE_KEY_MAPS = 'learning_maps_local';
 const STORAGE_KEY_PROGRESS = 'learning_maps_progress';
 const STORAGE_KEY_TASKS = 'learning_maps_tasks';
 
+// Mode change listeners
+type ModeChangeListener = (mode: StorageMode) => void;
+const modeListeners: ModeChangeListener[] = [];
+
+export function subscribeToModeChanges(listener: ModeChangeListener): () => void {
+  modeListeners.push(listener);
+  return () => {
+    const idx = modeListeners.indexOf(listener);
+    if (idx >= 0) modeListeners.splice(idx, 1);
+  };
+}
+
 export function getStorageMode(): StorageMode {
   const stored = localStorage.getItem(STORAGE_KEY_MODE);
   if (stored === 'api' && apiService.isConfigured()) {
@@ -29,6 +40,7 @@ export function getStorageMode(): StorageMode {
 
 export function setStorageMode(mode: StorageMode) {
   localStorage.setItem(STORAGE_KEY_MODE, mode);
+  modeListeners.forEach(fn => fn(mode));
 }
 
 function useApi(): boolean {
