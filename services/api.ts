@@ -1,12 +1,11 @@
-
 /**
  * API Service - Connects to Google Apps Script Backend
  * 
- * This service handles all communication with the backend.
- * The API URL is stored in localStorage and persists across sessions.
+ * IMPORTANT: This file handles all backend communication.
+ * The API URL is saved to localStorage and persists across sessions.
  */
 
-import { LearningMap, HexProgress, Course, Unit, ClassGroup, HexTemplate, CurriculumConfig, User } from '../types';
+import { LearningMap, HexProgress } from '../types';
 
 // Types
 export interface ApiResponse {
@@ -36,7 +35,7 @@ export interface ConnectionInfo {
   userRole?: string;
 }
 
-// Storage Keys - THESE MAKE THE CONNECTION PERSIST!
+// Storage Keys
 const STORAGE_KEY_API_URL = 'learning_map_api_url';
 const STORAGE_KEY_CONNECTION = 'learning_map_connection';
 
@@ -96,7 +95,9 @@ class ApiService {
     this.saveState();
   }
 
-  getApiUrl(): string | null { return this.apiUrl; }
+  getApiUrl(): string | null { 
+    return this.apiUrl; 
+  }
   
   setApiUrl(url: string): void {
     let cleanUrl = url.trim();
@@ -114,18 +115,31 @@ class ApiService {
       localStorage.removeItem(STORAGE_KEY_CONNECTION);
       this.apiUrl = null;
       this.updateConnectionInfo({ state: 'disconnected', apiUrl: null, error: null });
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Could not clear API state:', e);
+    }
   }
 
-  isConfigured(): boolean { return this.apiUrl !== null && this.apiUrl.length > 0; }
-  getConnectionInfo(): ConnectionInfo { return { ...this.connectionInfo }; }
+  isConfigured(): boolean { 
+    return this.apiUrl !== null && this.apiUrl.length > 0; 
+  }
+  
+  getConnectionInfo(): ConnectionInfo { 
+    return { ...this.connectionInfo }; 
+  }
+  
   subscribe(listener: (info: ConnectionInfo) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
 
-  private async request<T extends ApiResponse = ApiResponse>(action: string, params: Record<string, any> = {}): Promise<T> {
-    if (!this.apiUrl) return { success: false, error: 'API URL not configured' } as T;
+  private async request<T extends ApiResponse = ApiResponse>(
+    action: string, 
+    params: Record<string, any> = {}
+  ): Promise<T> {
+    if (!this.apiUrl) {
+      return { success: false, error: 'API URL not configured' } as T;
+    }
 
     try {
       const url = new URL(this.apiUrl);
@@ -138,9 +152,19 @@ class ApiService {
       });
 
       console.log('API:', action);
-      const response = await fetch(url.toString(), { method: 'GET', redirect: 'follow' });
-      if (!response.ok) throw new Error('HTTP ' + response.status);
-      return JSON.parse(await response.text()) as T;
+      
+      const response = await fetch(url.toString(), { 
+        method: 'GET', 
+        redirect: 'follow' 
+      });
+      
+      if (!response.ok) {
+        throw new Error('HTTP ' + response.status);
+      }
+      
+      const text = await response.text();
+      return JSON.parse(text) as T;
+      
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Network error';
       console.error('API Error (' + action + '):', msg);
@@ -161,10 +185,14 @@ class ApiService {
       this.updateConnectionInfo({ state: 'needs_setup', error: null, lastCheck: new Date() });
     } else if (result.configured) {
       this.updateConnectionInfo({ 
-        state: 'connected', error: null, lastCheck: new Date(),
-        spreadsheetName: result.spreadsheetName, schemaVersion: result.schemaVersion
+        state: 'connected', 
+        error: null, 
+        lastCheck: new Date(),
+        spreadsheetName: result.spreadsheetName, 
+        schemaVersion: result.schemaVersion
       });
     }
+    
     return result;
   }
 
@@ -189,25 +217,70 @@ class ApiService {
     return result;
   }
 
-  async whoAmI(): Promise<ApiResponse> { return this.request('getCurrentUser'); }
-  async getMaps(): Promise<ApiResponse> { return this.request('getMaps'); }
-  async getMap(mapId: string): Promise<ApiResponse> { return this.request('getMap', { mapId }); }
+  async whoAmI(): Promise<ApiResponse> { 
+    return this.request('getCurrentUser'); 
+  }
+  
+  async getMaps(): Promise<ApiResponse> { 
+    return this.request('getMaps'); 
+  }
+  
+  async getMap(mapId: string): Promise<ApiResponse> { 
+    return this.request('getMap', { mapId }); 
+  }
+  
   async saveMap(map: LearningMap): Promise<ApiResponse> {
     return this.request('saveMap', {
-      mapId: map.mapId, title: map.title, courseId: map.courseId, unitId: map.unitId,
-      teacherEmail: map.teacherEmail, hexes: map.hexes, ubdData: map.ubdData, meta: map.meta
+      mapId: map.mapId, 
+      title: map.title, 
+      courseId: map.courseId, 
+      unitId: map.unitId,
+      teacherEmail: map.teacherEmail, 
+      hexes: map.hexes, 
+      ubdData: map.ubdData, 
+      meta: map.meta
     });
   }
-  async duplicateMap(sourceId: string, newTitle: string): Promise<ApiResponse> { return this.request('duplicateMap', { sourceId, newTitle }); }
-  async getCourses(): Promise<ApiResponse> { return this.request('getCourses'); }
-  async getUnits(): Promise<ApiResponse> { return this.request('getUnits'); }
-  async getClasses(): Promise<ApiResponse> { return this.request('getClasses'); }
-  async getTemplates(): Promise<ApiResponse> { return this.request('getHexTemplates'); }
-  async getCurriculum(): Promise<ApiResponse> { return this.request('getCurriculumConfig'); }
-  async saveProgress(mapId: string, hexId: string, status: HexProgress, score?: number): Promise<ApiResponse> { return this.request('updateProgress', { mapId, hexId, status, score }); }
-  async getProgress(mapId: string): Promise<ApiResponse> { return this.request('getStudentProgress', { mapId }); }
-  async assignMapToClass(mapId: string, classId: string): Promise<ApiResponse> { return this.request('assignMap', { mapId, classId }); }
-  async assignMapToStudents(mapId: string, emails: string[]): Promise<ApiResponse> { return this.request('assignMap', { mapId, emails: emails.join(',') }); }
+  
+  async duplicateMap(sourceId: string, newTitle: string): Promise<ApiResponse> { 
+    return this.request('duplicateMap', { sourceId, newTitle }); 
+  }
+  
+  async getCourses(): Promise<ApiResponse> { 
+    return this.request('getCourses'); 
+  }
+  
+  async getUnits(): Promise<ApiResponse> { 
+    return this.request('getUnits'); 
+  }
+  
+  async getClasses(): Promise<ApiResponse> { 
+    return this.request('getClasses'); 
+  }
+  
+  async getTemplates(): Promise<ApiResponse> { 
+    return this.request('getHexTemplates'); 
+  }
+  
+  async getCurriculum(): Promise<ApiResponse> { 
+    return this.request('getCurriculumConfig'); 
+  }
+  
+  async saveProgress(mapId: string, hexId: string, status: HexProgress, score?: number): Promise<ApiResponse> { 
+    return this.request('updateProgress', { mapId, hexId, status, score }); 
+  }
+  
+  async getProgress(mapId: string): Promise<ApiResponse> { 
+    return this.request('getStudentProgress', { mapId }); 
+  }
+  
+  async assignMapToClass(mapId: string, classId: string): Promise<ApiResponse> { 
+    return this.request('assignMap', { mapId, classId }); 
+  }
+  
+  async assignMapToStudents(mapId: string, emails: string[]): Promise<ApiResponse> { 
+    return this.request('assignMap', { mapId, emails: emails.join(',') }); 
+  }
 }
 
 export const apiService = new ApiService();

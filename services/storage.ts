@@ -1,13 +1,8 @@
-
 /**
- * Storage Service - Clean Version (NO MOCK DATA)
+ * Storage Service - NO MOCK DATA
  * 
- * This service provides data access that:
- * - Uses the API when connected to backend
- * - Falls back to minimal local storage for offline use
- * 
- * The mock data has been REMOVED to avoid confusion.
- * All real data comes from the Google Sheets backend.
+ * Uses API when connected, falls back to localStorage when offline.
+ * All the fake courses/maps have been REMOVED.
  */
 
 import { 
@@ -16,32 +11,13 @@ import {
 } from '../types';
 import { apiService } from './api';
 
-// ============================================
-// STORAGE MODE
-// ============================================
-
+// Storage Mode
 export type StorageMode = 'mock' | 'api';
 
 const STORAGE_KEY_MODE = 'learning_map_storage_mode';
 const STORAGE_KEY_MAPS = 'learning_maps_local';
 const STORAGE_KEY_PROGRESS = 'learning_maps_progress';
 const STORAGE_KEY_TASKS = 'learning_maps_tasks';
-
-// Mode change listeners
-type ModeChangeListener = (mode: StorageMode) => void;
-const modeListeners: ModeChangeListener[] = [];
-
-export function subscribeToModeChanges(listener: ModeChangeListener): () => void {
-  modeListeners.push(listener);
-  return () => {
-    const idx = modeListeners.indexOf(listener);
-    if (idx >= 0) modeListeners.splice(idx, 1);
-  };
-}
-
-function notifyModeChange(mode: StorageMode) {
-  modeListeners.forEach(fn => fn(mode));
-}
 
 export function getStorageMode(): StorageMode {
   const stored = localStorage.getItem(STORAGE_KEY_MODE);
@@ -53,17 +29,13 @@ export function getStorageMode(): StorageMode {
 
 export function setStorageMode(mode: StorageMode) {
   localStorage.setItem(STORAGE_KEY_MODE, mode);
-  notifyModeChange(mode);
 }
 
 function useApi(): boolean {
   return getStorageMode() === 'api' && apiService.isConfigured();
 }
 
-// ============================================
-// HELPER: Normalize Map Data
-// ============================================
-
+// Normalize map data
 function normalizeMap(map: LearningMap): LearningMap {
   const m = JSON.parse(JSON.stringify(map));
   if (!Array.isArray(m.hexes)) m.hexes = [];
@@ -81,10 +53,7 @@ function normalizeMap(map: LearningMap): LearningMap {
   return m;
 }
 
-// ============================================
-// LOCAL STORAGE HELPERS (Fallback only)
-// ============================================
-
+// Local storage helpers
 function getLocalMaps(): LearningMap[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY_MAPS);
@@ -98,10 +67,7 @@ function saveLocalMaps(maps: LearningMap[]) {
   localStorage.setItem(STORAGE_KEY_MAPS, JSON.stringify(maps));
 }
 
-// ============================================
-// ANALYTICS (for Dashboard)
-// ============================================
-
+// Analytics for Dashboard
 export function computeAnalytics(map: LearningMap) {
   const countsByType: Record<string, number> = { core: 0, ext: 0, scaf: 0, student: 0, class: 0 };
   const countsBySBAR = { K: 0, T: 0, C: 0 };
@@ -113,8 +79,7 @@ export function computeAnalytics(map: LearningMap) {
   let linkNoSbar = 0, linkNoStandards = 0, linkNoCompetencies = 0;
 
   map.hexes.forEach(hex => {
-    const type = (hex.type || 'core').toLowerCase();
-    countsByType[type] = (countsByType[type] || 0) + 1;
+    countsByType[(hex.type || 'core').toLowerCase()] = (countsByType[(hex.type || 'core').toLowerCase()] || 0) + 1;
     if (hex.linkUrl) linkedCount++; else unlinkedCount++;
     
     const cur = hex.curriculum || {};
@@ -125,37 +90,38 @@ export function computeAnalytics(map: LearningMap) {
       const c = (code || '').toUpperCase();
       if (c.includes('K') || c.includes('U')) countsBySBAR.K++;
       else if (c.includes('T')) countsBySBAR.T++;
-      else if (c.includes('C')) countsBySBAR.C++;
+      else if (c === 'C') countsBySBAR.C++;
     });
 
-    (cur.standards || []).forEach(s => { standardsSet.add(s); });
-    if ((!cur.standards || cur.standards.length === 0) && hex.linkUrl) linkNoStandards++;
-
-    (cur.competencies || []).forEach(c => { competenciesSet.add(c); });
-    if ((!cur.competencies || cur.competencies.length === 0) && hex.linkUrl) linkNoCompetencies++;
-
+    (cur.standards || []).forEach(s => standardsSet.add(s));
+    (cur.competencies || []).forEach(c => competenciesSet.add(c));
     (cur.atlSkills || []).forEach(a => atlSet.add(a));
+    
+    if (!(cur.standards?.length) && hex.linkUrl) linkNoStandards++;
+    if (!(cur.competencies?.length) && hex.linkUrl) linkNoCompetencies++;
   });
 
   const ubd = map.ubdData;
-  const hasUbD = !!(ubd?.bigIdea || (ubd?.essentialQuestions && ubd.essentialQuestions.length > 0) || ubd?.stage1_understandings);
+  const hasUbD = !!(ubd?.bigIdea || (ubd?.essentialQuestions?.length) || ubd?.stage1_understandings);
 
   return {
-    totalHexes: map.hexes.length, countsByType, countsBySBAR,
-    standards: Array.from(standardsSet), competencies: Array.from(competenciesSet), atlSkills: Array.from(atlSet),
-    linkedCount, unlinkedCount, hasUbD,
+    totalHexes: map.hexes.length, 
+    countsByType, 
+    countsBySBAR,
+    standards: Array.from(standardsSet), 
+    competencies: Array.from(competenciesSet), 
+    atlSkills: Array.from(atlSet),
+    linkedCount, 
+    unlinkedCount, 
+    hasUbD,
     gaps: { linkNoSbar, linkNoStandards, linkNoCompetencies }
   };
 }
 
-// ============================================
-// STORAGE SERVICE
-// ============================================
-
+// Main Storage Service
 export const storageService = {
   
-  // ========== MAPS ==========
-  
+  // MAPS
   getMaps: async (): Promise<LearningMap[]> => {
     if (useApi()) {
       try {
@@ -236,8 +202,7 @@ export const storageService = {
     });
   },
 
-  // ========== PROGRESS ==========
-
+  // PROGRESS
   updateStudentProgress: async (mapId: string, hexId: string, status: HexProgress, score?: number) => {
     if (useApi()) {
       try {
@@ -246,7 +211,6 @@ export const storageService = {
       } catch (e) {}
     }
     
-    // Local fallback
     const stored = localStorage.getItem(STORAGE_KEY_PROGRESS);
     const progress: StudentProgressRecord[] = stored ? JSON.parse(stored) : [];
     const filtered = progress.filter(p => !(p.mapId === mapId && p.hexId === hexId));
@@ -272,8 +236,7 @@ export const storageService = {
     return result;
   },
 
-  // ========== REFERENCE DATA ==========
-
+  // REFERENCE DATA
   getClasses: async (): Promise<ClassGroup[]> => {
     if (useApi()) {
       try {
@@ -291,7 +254,6 @@ export const storageService = {
         if (response.success && response.templates) return response.templates;
       } catch (e) {}
     }
-    // Minimal defaults
     return [
       { templateId: 't1', name: 'Lesson', icon: '📚', defaultType: 'core', defaultLabel: 'Lesson' },
       { templateId: 't2', name: 'Activity', icon: '✏️', defaultType: 'ext', defaultLabel: 'Activity' },
@@ -316,10 +278,8 @@ export const storageService = {
         if (response.success && response.user) {
           return { 
             email: response.user.email, 
-            name: response.user.name || response.user.email.split('@')[0],
-            role: response.user.role,
-            isAdmin: response.user.isAdmin
-          } as User;
+            name: response.user.name || response.user.email.split('@')[0]
+          };
         }
       } catch (e) {}
     }
@@ -348,8 +308,7 @@ export const storageService = {
     return [];
   },
 
-  // ========== ASSIGNMENTS ==========
-
+  // ASSIGNMENTS
   assignMapToClass: async (mapId: string, classId: string): Promise<number> => {
     if (useApi()) {
       try {
@@ -370,8 +329,7 @@ export const storageService = {
     return 0;
   },
 
-  // ========== EXPORT ==========
-
+  // EXPORT
   exportMapToDoc: async (map: LearningMap): Promise<string> => {
     const content = 'MAP: ' + map.title + '\n\nHEXES:\n' + map.hexes.map(h => '[' + h.type + '] ' + h.label).join('\n');
     return URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
@@ -385,8 +343,7 @@ export const storageService = {
     return URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
   },
 
-  // ========== DEV TASKS (Local only) ==========
-
+  // DEV TASKS (Local only)
   getDevTasks: async (): Promise<DevTask[]> => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_TASKS);
@@ -405,7 +362,18 @@ export const storageService = {
       newTask = { ...tasks[idx], ...task, updated: now } as DevTask;
       tasks[idx] = newTask;
     } else {
-      newTask = { id: 'T' + Date.now(), title: task.title || 'Untitled', status: task.status || 'Backlog', epic: task.epic || '', ai: task.ai || '', url: task.url || '', notes: task.notes || '', owner: '', created: now, updated: now };
+      newTask = { 
+        id: 'T' + Date.now(), 
+        title: task.title || 'Untitled', 
+        status: task.status || 'Backlog', 
+        epic: task.epic || '', 
+        ai: task.ai || '', 
+        url: task.url || '', 
+        notes: task.notes || '', 
+        owner: '', 
+        created: now, 
+        updated: now 
+      };
       tasks.push(newTask);
     }
     
